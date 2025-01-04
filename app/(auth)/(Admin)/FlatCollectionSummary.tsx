@@ -1,0 +1,539 @@
+import { StyleSheet, View, FlatList, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from "react";
+import { useSociety } from "../../../utils/SocietyContext";
+import { useRouter, useLocalSearchParams, useNavigation, Stack } from 'expo-router';
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { db } from "../../../FirebaseConfig";
+import { Appbar, Button, Card, Text, TouchableRipple, Avatar, Menu, Divider, Checkbox } from "react-native-paper";
+
+interface BillItem {
+    itemName: string;
+    ledgerAccount: string;
+    updatedLedgerAccount: string;
+}
+
+interface BillsData {
+    id: string;
+    title: string;
+    amount: number;
+    dueDate: string;
+    status: string;
+    overdueDays:number;
+    date?: string; // Make optional if not always available
+    unpaidAmount?: number;
+    paidAmount?: number;
+    billItems?: BillItem[]; // Array of filtered BillItem objects
+}
+
+interface UnclearedBalanceEntry {
+    amount: number;
+}
+interface UnclearedBalance {
+    amount: number;
+    paymentDate: string;
+    paymentMode: string;
+    transactionId: string;
+    bankName:string;
+    chequeNo:string;
+    status:string;
+    selectedIds:any;
+    
+}
+
+const FlatCollectionSummary = () => {
+    const router = useRouter();
+    const { societyName } = useSociety();
+    const params = useLocalSearchParams();
+    const [bills, setBills] = useState<BillsData[]>([]);
+    const [unclearedBalances, setUnclearedBalances] = useState<UnclearedBalance[]>([]);
+    const [currentBalance, setCurrentBalance] = useState<number>(0);
+    const [deposit, setDeposit] = useState<number>(0);
+
+    const wing = params.wing as string;
+    const floorName = params.floorName as string;
+    const flatNumber = params.flatNumber as string;
+    
+    const [menuVisible, setMenuVisible] = useState(false);
+
+    const [selectedBills, setSelectedBills] = useState<string[]>([]); // NEW STATE
+
+
+    useEffect(() => {
+        fetchBills();
+    }, []);
+
+   
+
+    
+
+    const fetchBills = async () => {
+        try {
+            const societiesDocRef = doc(db, "Societies", societyName as string);
+            const societyDocSnap = await getDoc(societiesDocRef);
+
+            if (!societyDocSnap.exists()) {
+                console.error("Societies document does not exist");
+                return;
+            }
+
+            const societyData = societyDocSnap.data();
+            const societyWings = societyData.wings;
+
+            const relevantWing = societyWings?.[wing]?.floorData?.[floorName]?.[flatNumber];
+            if (!relevantWing || !relevantWing.bills) {
+                console.error("No bills found for this flat.");
+                return;
+            }
+
+            // Set Current Balance and Deposit
+            setCurrentBalance(relevantWing.currentBalance || 0);
+            setDeposit(relevantWing.deposit || 0);
+
+            const billCollection = await getDocs(collection(db, "bills"));
+            const billsData: BillsData[] = [];
+
+            billCollection.forEach((billDoc) => {
+                const bill = billDoc.data();
+                const billNumber = bill.billNumber;
+
+                const flatBill = relevantWing.bills[billNumber];
+                if (flatBill && flatBill.status === 'unpaid') {
+                    billsData.push({
+                        id: billDoc.id,
+                        title: bill.name,
+                        dueDate: bill.startDate,
+                        overdueDays: calculateOverdueDays(bill.startDate),
+                        amount: flatBill.amount,
+                        status: flatBill.status,
+                        billItems: bill.items?.map((item: any) => ({
+                            itemName: item.itemName,
+                            ledgerAccount: item.ledgerAccount,
+                            updatedLedgerAccount: item.updatedLedgerAccount,
+                        })),
+                    });
+                }
+            });
+
+            setBills(billsData);
+
+            // Process uncleared balances
+            if (relevantWing.unclearedBalance) {
+                const unclearedData: UnclearedBalance[] = relevantWing.unclearedBalance;
+                // Filter for entries with status "Uncleared"
+                const filteredUnclearedData = unclearedData.filter(
+                    (entry) => entry.status === "Uncleared"
+                );
+                setUnclearedBalances(filteredUnclearedData);
+            }
+        } catch (error) {
+            console.error("Error fetching bills:", error);
+        }
+    };
+
+    const calculateOverdueDays = (dueDate: string) => {
+        const due = new Date(dueDate);
+        const today = new Date();
+        const diffTime = today.getTime() - due.getTime();
+        return Math.max(Math.floor(diffTime / (1000 * 60 * 60 * 24)), 0);
+    };
+
+    const handleMakePaidAll = () => {
+        if (unclearedBalances.length > 0) {
+            alert("Kindly accept or reject uncleared balance from the payment request.");
+            return; // Prevent further execution
+        }
+        const selectedItems = bills.filter((bill) => selectedBills.includes(bill.id));
+        const totalAmount = selectedItems.reduce((sum, bill) => sum + bill.amount, 0);
+        // console.log('totalAmount', totalAmount)
+        router.push({
+            pathname: "/MakePaidAll",
+            params: {
+                wing,
+                floorName,
+                flatNumber,
+                selectedIds: JSON.stringify(selectedBills),
+                totalAmount: totalAmount.toFixed(2),
+                totalDue: totalDue.toFixed(2),
+                currentBalance: currentBalance.toFixed(2),
+                unclearedBalance: totalUncleared.toFixed(2),
+            },
+          });
+    }
+
+    const toggleSelection = (id: string) => {
+        setSelectedBills((prev) =>
+          prev.includes(id) ? prev.filter((billId) => billId !== id) : [...prev, id]
+        );
+      };
+
+    const renderBillItem = ({ item }: { item: BillsData }) => {
+        const isSelected = selectedBills.includes(item.id);
+        return (
+        <Card style={styles.card} elevation={1}>
+            <Card.Content>
+                <Text style={styles.billTitle}>{item.title}</Text>
+                {/* Conditionally render unpaid amount */}
+                {item.overdueDays> 0 && (
+                <Text style={styles.overdue}>Overdue by {item.overdueDays} days</Text>
+                )}
+                <Text style={styles.dueDate}>{item.dueDate}</Text>
+                <Text style={styles.amount}>₹ {item.amount.toFixed(2)}</Text>
+                <Text style={styles.status}>{item.status.toUpperCase()}</Text>
+                <TouchableOpacity
+                      style={styles.actionButtonview}
+                      onPress={() => router.push({
+                        pathname: "/billdetailperflat",
+                        params: {
+                            source: "Admin",
+                            societyName,
+                            wing: wing,
+                            floorName:floorName,
+                            flatNumber: flatNumber,
+                            billNumber: item.id,
+                            amount:item.amount.toFixed(2),
+                            status:item.status,
+                        },
+                      })}
+                    >
+                      <Text style={styles.actionText}>View</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.checkbox}>
+                    <Checkbox
+                        status={isSelected ? "checked" : "unchecked"}
+                        onPress={() => toggleSelection(item.id)}
+                        />
+                    </View>
+            </Card.Content>
+        </Card>
+        );
+    };
+
+    const renderUnclearedItem = ({ item }: { item: UnclearedBalance }) => (
+        <TouchableRipple
+        onPress={() => {
+            router.push({
+                pathname: "/paymentRecipt",
+                params: {
+                    wing: wing,
+                    floorName:floorName,
+                    flatNumber: flatNumber,
+                    totalDue,
+                    currentBalance,
+                    totalUncleared,
+                    amount: item.amount.toFixed(2),
+                    paymentDate: item.paymentDate,
+                    paymentMode: item.paymentMode,
+                    transactionId: item.transactionId,
+                    selectedIds: JSON.stringify(item.selectedIds),
+                    // Add other necessary params if available
+                },
+            }); 
+        }}
+        rippleColor="rgba(0, 0, 0, 0.2)"
+    >
+        <Card style={styles.paymentRequestCard} elevation={1}>
+            <Card.Content>
+                <Text style={styles.paymentRequestTitle}>Add Money</Text>
+                <Text style={styles.paymentDate}>{item.paymentDate}</Text>
+                <Text style={styles.paymentAmount}>₹ {item.amount.toFixed(2)}</Text>
+                <View style={styles.unclearedStatusContainer}>
+                    <Text style={styles.unclearedStatus}>Uncleared</Text>
+                </View>
+            </Card.Content>
+        </Card>
+        </TouchableRipple>
+    );
+
+    const totalUncleared = unclearedBalances.reduce((sum, b) => sum + b.amount, 0);
+    
+    const totalDue = bills
+        .filter((b) => b.status === "unpaid")
+        .reduce((sum, b) => sum + b.amount, 0);
+
+    return (
+        <View style={styles.container}>
+            {/* Remove Stack Header */}
+            <Stack.Screen options={
+                {headerShown:false}
+            } />
+
+            {/* Appbar Header */}
+            <Appbar.Header style={styles.header}>
+                <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+                <Appbar.Content title="Flat Collection Summary" titleStyle={styles.titleStyle} />
+                <Menu
+                    visible={menuVisible}
+                    onDismiss={() => setMenuVisible(false)}
+                    anchor={<Appbar.Action icon="dots-vertical" color="#fff" onPress={() => setMenuVisible(true)} />}
+                    >
+                    <Menu.Item onPress={() => {}} title="Wallet" />
+                    <Menu.Item onPress={() => {}} title="Advanced Payment" />
+                    <Menu.Item onPress={() => {}} title="Refund Payment" />
+                    <Menu.Item onPress={() => {}} title="Receipts" />
+                    <Menu.Item onPress={() => {}} title="Statement" />
+                </Menu>
+            </Appbar.Header>
+
+            {/* Profile Header */}
+            <View style={styles.profileContainer}>
+                <Avatar.Text size={44} label="XD" style={styles.avatar} />
+                <View style={styles.textContainer}>
+                    <Text style={styles.profileText}>{wing} {flatNumber}</Text>
+                </View>
+            </View>
+
+            <Divider style={{ backgroundColor: "white", height: 1 }} />
+
+            {/* Balance Summary */}
+            <View style={styles.summaryContainer}>
+                <View style={styles.summaryItem}>
+                    <Text style={styles.summaryTitle}>Total Due</Text>
+                    <Text style={styles.summaryValue}>
+                        ₹ {totalDue.toFixed(2)}
+                    </Text>
+                </View>
+                <View style={styles.summaryItem}>
+                    <Text style={styles.summaryTitle}>Current Balance</Text>
+                    <Text style={styles.summaryValue}>₹ {currentBalance.toFixed(2)}</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                    <Text style={styles.summaryTitle}>Deposit</Text>
+                    <Text style={styles.summaryValue}>₹ {deposit.toFixed(2)}</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                    <Text style={styles.summaryTitle}>Uncleared Balance</Text>
+                    <Text style={styles.summaryValue}>₹ {totalUncleared.toFixed(2)}</Text>
+                </View>
+            </View>
+
+            <Divider style={{ backgroundColor: "white", height: 1 }} />
+
+            {/* Wallet, Advance and Refund Actions */}
+                  <View style={styles.actionsContainer}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => router.push({
+                        pathname: "/Wallet",
+                        params: {
+                            source: "Admin",
+                            societyName,
+                            wing: wing,
+                            floorName:floorName,
+                            flatNumber: flatNumber,
+                        },
+                      })}
+                    >
+                      <Text style={styles.actionText}>Wallet</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => router.push({
+                        pathname: "/Advance",
+                        params: {
+                            wing: wing,
+                            floorName:floorName,
+                            flatNumber: flatNumber,
+                        },
+                      })}
+                    >
+                      <Text style={styles.actionText}>Advance</Text>
+                    </TouchableOpacity>
+
+                    {/* Conditionally render Refund button */}
+                    {currentBalance > 0 && (
+                        <TouchableOpacity
+                            style={[styles.actionButton, styles.activeActionButton]}
+                            onPress={() => router.push({
+                                pathname: "/Refund",
+                                params: {
+                                    wing: wing,
+                                    floorName:floorName,
+                                    flatNumber: flatNumber,
+                                },
+                              })}
+                        >
+                            <Text style={[styles.actionText, styles.activeActionText]}>Refund</Text>
+                        </TouchableOpacity>
+                    )}
+
+                  </View>
+
+                
+            <ScrollView>
+            {/* Payment Request Section */}
+            {unclearedBalances.length > 0 && (
+                <View>
+                    <Text style={styles.sectionTitle}>Payment Request</Text>
+                    <FlatList
+                        data={unclearedBalances}
+                        keyExtractor={(item, index) => index.toString()}
+                        renderItem={renderUnclearedItem}
+                        contentContainerStyle={styles.listContainer}
+                        scrollEnabled={false} // Disable scrolling
+                    />
+                </View>
+            )}
+
+            {/* Bills Section */}
+
+            <View>
+                <Text style={styles.sectionTitle}>Bills</Text>
+                {bills.filter((bill) => bill.status === "unpaid").length > 0 ? (
+                    <FlatList
+                        data={bills.filter((bill) => bill.status === "unpaid")}
+                        keyExtractor={(item) => item.id}
+                        renderItem={renderBillItem}
+                        contentContainerStyle={styles.listContainer}
+                        scrollEnabled={false} // Disable scrolling
+                    />
+                ) : (
+                    <View style={styles.noBillsContainer}>
+                        <Text style={styles.noBillsText}>No Pending Bills</Text>
+                    </View>
+                )}
+            </View>
+
+            {bills.filter((bill) => bill.status === "unpaid").length > 0 && (
+                <Button
+                    mode="contained"
+                    style={styles.payButton}
+                    onPress={() => handleMakePaidAll()}
+                >
+                    Make Paid All
+                </Button>
+            )}
+
+        </ScrollView>
+        </View>
+    );
+};
+
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: "#fff" },
+    header: { backgroundColor: "#2196F3" },
+    titleStyle: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+      },
+    summaryContainer: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        padding: 16,
+        backgroundColor: "#2196F3",
+      },
+      summaryItem: { alignItems: "center" },
+      summaryTitle: { color: "white", fontSize: 12 },
+      summaryValue: { color: "white", fontWeight: "bold", fontSize: 12 },
+    listContainer: { paddingHorizontal: 16, paddingTop: 8 },
+    card: { marginVertical: 8 },
+    billTitle: { fontWeight: "bold", fontSize: 16 },
+    overdue: { color: "red", fontSize: 12 },
+    dueDate: { color: "#555", fontSize: 12 },
+    amount: {
+        position: "absolute",
+        right: 0,
+        top: 40,
+        color: "red",
+        fontWeight: "bold",
+        marginHorizontal: 10,
+    },
+    status: { fontSize: 12, color: "gray", marginTop: 4 },
+    payButton: { margin: 16, backgroundColor: "#2196F3" },
+    profileContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        backgroundColor: "#2196F3",
+    },
+    profileText: {
+        fontSize: 14,
+        color: "white",
+    },
+    textContainer: {
+        justifyContent: 'center',
+    },
+    avatar: {
+        backgroundColor: '#2196F3',
+        marginRight: 10,
+        borderColor:'#fff'
+    },
+    unclearedStatusContainer: { backgroundColor: "#333", paddingHorizontal: 8, paddingVertical: 4, marginTop: 8, alignSelf: "flex-end" },
+    unclearedStatus: { color: "white", fontSize: 12 },
+    sectionTitle: { fontWeight: "bold", fontSize: 18, margin: 16 },
+    paymentRequestCard: { backgroundColor: "#fcbf49", marginVertical: 8 },
+    paymentRequestTitle: { fontWeight: "bold", fontSize: 16, color: "#333" },
+    paymentDate: { color: "#555", fontSize: 12 },
+    paymentAmount: { fontWeight: "bold", fontSize: 16, position: "absolute", right: 10, top: 15 },
+    noBillsContainer: {
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+    },
+    noBillsText: {
+        fontSize: 16,
+        color: "#555",
+        textAlign: "center",
+    },
+
+    buttonContainer: { flexDirection: "row", justifyContent: "space-around", marginVertical: 16 },
+    
+
+
+    actionsContainer: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        paddingHorizontal: 16,
+        backgroundColor: "#2196F3",
+        padding: 10,
+      },
+      actionButton: {
+        flex: 1,
+        marginHorizontal: 8,
+        paddingVertical: 12,
+        backgroundColor: "#fff",
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#2196F3",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      activeActionButton: {
+        backgroundColor: "#fff",
+        borderColor: "#fff",
+      },
+      actionText: {
+        fontSize: 14,
+        fontWeight: "bold",
+        color: "#2196F3",
+      },
+      activeActionText: {
+        color: "#2196F3",
+      },
+      divider: {color: "#fff"},
+      actionButtonview: {
+        width:60,
+        right: 0,
+        top: 70,
+        position: "absolute",
+        marginHorizontal: 10,
+        paddingVertical: 4,
+        backgroundColor: "#D6F6D5",
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#2196F3",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 8,
+      },
+      checkbox:{
+        right: 0,
+        top: 5,
+        position: "absolute",
+        marginHorizontal: 10,
+      }
+});
+
+export default FlatCollectionSummary;

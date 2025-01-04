@@ -26,6 +26,7 @@ export default function TabLayout() {
         // to prevent a hydration error in React Navigation v6.
         headerShown: useClientOnlyValue(false, true),
       }}>
+      
       <Tabs.Screen
         name="index"
         options={{
@@ -47,10 +48,46 @@ export default function TabLayout() {
           ),
         }}
       />
+      
       <Tabs.Screen
-        name="two"
+        name="five"
         options={{
-          title: 'Tab Two',
+          title: 'Tab Five',
+          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="six"
+        options={{
+          title: 'Tab Six',
+          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="seven"
+        options={{
+          title: 'Tab Seven',
+          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="eight"
+        options={{
+          title: 'Tab Eight',
+          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="nine"
+        options={{
+          title: 'Tab Nine',
+          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="ten"
+        options={{
+          title: 'Tab Ten',
           tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
         }}
       />

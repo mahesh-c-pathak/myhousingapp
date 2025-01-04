@@ -5,8 +5,14 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
-
+import { SessionProvider, useSession } from "../utils/ctx";
+import { Slot } from "expo-router";
+import { useRouter } from "expo-router"
+import { PaperProvider } from 'react-native-paper';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/components/useColorScheme';
+import { StatusBar } from 'expo-status-bar';
+import { SocietyProvider } from "../utils/SocietyContext";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -15,7 +21,7 @@ export {
 
 export const unstable_settings = {
   // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
+  initialRouteName: '/(sign)/login',
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -42,18 +48,41 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <SessionProvider>
+      <SocietyProvider>
+        <SafeAreaProvider>
+          <PaperProvider>
+            <RootLayoutNav />
+          </PaperProvider>
+        </SafeAreaProvider>
+      </SocietyProvider>
+    </SessionProvider>
+  );
 }
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const { isAuthenticated } = useSession();
+  
+  const { isApproved } = useSession();
+  const router = useRouter()
+  useEffect(()=>{
+    if (typeof isAuthenticated == 'undefined' ) return;
+    if (isApproved == true && isAuthenticated == true){
+      router.replace('/(auth)/(tabs)');
+    } else if (isAuthenticated == false) {
+      router.replace('/(sign)/landing');
+    }
+  },[isAuthenticated])
 
   return (
+    <>
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
+      <Slot />
+      
     </ThemeProvider>
+    <StatusBar style='light'/>
+    </>
   );
 }
