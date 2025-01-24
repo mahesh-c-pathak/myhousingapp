@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Platform, ActivityIndicator, Alert, FlatList } from "react-native";
+import { View, StyleSheet, ScrollView, Platform, ActivityIndicator, Alert, FlatList, TouchableOpacity } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { MultiSelectDropdown } from "react-native-paper-dropdown";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import AppbarComponent from '../../../../components/AppbarComponent'; // Adjust the path as per your structure
 
+import DropdownMultiSelect from "../../../../utils/DropdownMultiSelect"
+import CustomButton from '../../../../components/CustomButton';
+import CustomInput from '../../../../components/CustomInput';
+import Dropdown from "../../../../utils/DropDown";
+import PaymentDatePicker from "../../../../utils/paymentDate";
+import { MaterialIcons } from '@expo/vector-icons'; // Or use another icon library if needed
+
+import { useSociety } from "../../../../utils/SocietyContext"; 
+import {fetchMembersUpdated} from "../../../../utils/fetchMembersUpdated";
 
 import {
   TextInput,
@@ -35,10 +44,19 @@ interface BillItem {
   rentAmount?: number;
   closedUnitAmount?: number;
   ledgerAccount?: string;
+  groupFrom?: string;
   updatedLedgerAccount?: string;
 }
 
+interface Member {
+  label: string;
+  value: string;
+  floor: string;
+}
+
 const CreateSpecialBill = () => {
+  const { societyName } = useSociety();
+
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [balancesheet, setBalancesheet] = useState("");
@@ -51,116 +69,79 @@ const CreateSpecialBill = () => {
   const [invoiceDate, setInvoiceDate] = useState<Date>(new Date());
   const [dueDate, setDueDate] = useState<Date>(new Date());
 
-  const [wings, setWings] = useState<Wing[]>([]);
-  const [selectedWings, setSelectedWings] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [members, setMembers] = useState<any>([]);
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
   const [isAdvancePaymentSettelement, setisAdvancePaymentSettelement] = useState(false);
 
-  const [showDatePicker, setShowDatePicker] = useState<{
-    visible: boolean;
-    type: "start" | "end" | "invoice" | "due";
-  }>({
-    visible: false,
-    type: "start",
-  });
 
   const router = useRouter();
   const params = useLocalSearchParams();
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [billItems, setBillItems] = useState<BillItem[]>([]);
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === "android") setShowDatePicker({ ...showDatePicker, visible: false });
+  const [fetchedmembers, setFetchedMembers] = useState<Member[]>([]);
 
-    if (selectedDate) {
-      switch (showDatePicker.type) {
-        case "start":
-          setStartDate(selectedDate);
-          break;
-        case "end":
-          setEndDate(selectedDate);
-          break;
-        case "invoice":
-          setInvoiceDate(selectedDate);
-          break;
-        case "due":
-          setDueDate(selectedDate);
-          break;
-      }
-    }
-  };
+  const [selectedfetchedMembers, setSelectedFetchedMembers] = useState<
+    { floor: string; label: string; value: string }[]
+  >([]);
+  
 
   useEffect(() => {
-    const fetchWings = async () => {
-      setLoading(true);
+    const loadMembers = async () => {
       try {
-        // Reference the "Happy Home" document in the "Societies" collection
-        const docRef = doc(db, "Societies", "New Home Test");
-        const docSnapshot = await getDoc(docRef);
-
-        if (docSnapshot.exists()) {
-          const data = docSnapshot.data();
-          const wingsData = data.wings;
-
-          // Create a temporary list to store members
-        // const tempMembers: string[] = [];
-        const tempMembers: { wing: string; flat: number; label: string; value: string }[] = [];
-
-          Object.entries(wingsData).forEach(([wing, wingData]: any) => {
-            Object.entries(wingData.floorData).forEach(([floor, flats]: any) => {
-              Object.entries(flats).forEach(([flatNumber, flatData]: any) => {
-                // Append the formatted member details to the tempMembers list
-                tempMembers.push({
-                  wing,
-                  flat: parseInt(flatNumber), // Convert flat number to a number for proper sorting
-                  label: `${wing} ${flatNumber}`,
-                  value: `${wing} ${flatNumber}`,
-                });
-
-            });
-            });
-          });
-
-          // Sort by wing (alphabetically) and then by flat (numerically)
-          const sortedMembers = tempMembers.sort((a, b) => {
-            if (a.wing < b.wing) return -1;
-            if (a.wing > b.wing) return 1;
-            return a.flat - b.flat;
-          });
-
-          // Set members state with the list of wing-flat combinations
-          setMembers(
-            sortedMembers.map((member) => ({
-              label: member.label,
-              value: member.value,
-            }))
-          );
-              
-
-          if (data.wings && typeof data.wings === "object") {
-            // Extract keys (e.g., "Wing-A", "Wing-B") as wing names
-            const wingOptions = Object.keys(data.wings).map((key) => ({
-              label: key,
-              value: key,
-            }));
-            setWings(wingOptions);
-          }
-        } else {
-          console.error("Document not found!");
-        }
-      } catch (error) {
-        console.error("Error fetching wings:", error);
+        setLoading(true);
+        const fetchedMembers = await fetchMembersUpdated(societyName);
+        setFetchedMembers(fetchedMembers);
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchWings();
+    loadMembers();
   }, []);
+
+  const handleSelectionChange = (selectedValues: string[]) => {
+    const updatedSelectedMembers = selectedValues.map((value) => {
+      const selectedMember = fetchedmembers.find((member) => member.value === value);
+      if (selectedMember) {
+        return {
+          floor: selectedMember.floor,
+          label: selectedMember.label,
+          value: selectedMember.value,
+        };
+      }
+      return null;
+    }).filter((member) => member !== null); // Filter out any null values
+
+    setSelectedFetchedMembers(updatedSelectedMembers as { floor: string; label: string; value: string }[]);
+  };
+
+  const [formattedMembersData, setFormattedMembersData] = useState<string[]>([]);
+
+  useEffect(()=>{
+    console.log("formattedMembersData", formattedMembersData)
+  },[formattedMembersData])
+
+  useEffect(() => {
+    // Format the data as desired
+    const newData = selectedfetchedMembers.map((item) => `${item.floor} ${item.label}`);
+    setFormattedMembersData(newData);
+  }, [selectedfetchedMembers]);
+
+  const handleDateChange = (newDate: Date, type: string) => {
+    if (type === "start") {
+      setStartDate(newDate);
+    } else if (type === "end") {
+      setEndDate(newDate);
+    } else if (type === "invoice") {
+      setInvoiceDate(newDate);
+    } else if (type === "due") {
+      setDueDate(newDate);
+    }
+  };
 
   // Fetch Bill Items from Firestore
   useEffect(() => {
@@ -240,7 +221,7 @@ const CreateSpecialBill = () => {
    Alert.alert("Validation Error", "Please select a dueDate.");
    return;
  }
- if (selectedMembers.length === 0) {
+ if (selectedfetchedMembers.length === 0) {
   Alert.alert("Validation Error", "Please select at least one Member.");
   return;
   }
@@ -257,7 +238,8 @@ const CreateSpecialBill = () => {
    startDate: startDate.toISOString().split("T")[0],
    endDate: endDate.toISOString().split("T")[0],
    dueDate: dueDate.toISOString().split("T")[0],
-   members:selectedMembers.join(", "),
+   invoiceDate: invoiceDate.toISOString().split("T")[0],
+   members:formattedMembersData.join(", "),
    items: JSON.stringify(billItems),
  };
 
@@ -278,144 +260,132 @@ const CreateSpecialBill = () => {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.container}>
+
+    {/* Top Appbar */}
+    <AppbarComponent
+        title="Create Special Bill"
+        source="Admin"
+      />
+
+      <FlatList
+              data={[{}]} // Use a single-item list to render your UI
+              renderItem={() => (
+                <>
+                
+                
       {/* Bill Details Section */}
-      <View style={styles.section}>
+      <View style={styles.cardview}>
         <Text style={styles.sectionHeader}>Bill Details</Text>
         <Divider style={styles.divider} />
-        <TextInput
-          label="Name"
-          value={name}
-          onChangeText={setName}
-          mode="outlined"
-          style={styles.input}
-        />
-        <TextInput
-          label="Note (optional)"
-          value={note}
-          onChangeText={setNote}
-          mode="outlined"
-          multiline
-          style={styles.input}
-        />
-        {/* Dropdown for Balancesheet */}
-        <View style={styles.dropdownContainer}>
-          <Menu
-            visible={balancesheetVisible}
-            onDismiss={() => setBalancesheetVisible(false)}
-            anchor={
-              <TextInput
-                label="Select Balancesheet"
-                value={balancesheet || "Select"}
-                editable={false}
-                right={<TextInput.Icon icon="chevron-down" onPress={() => setBalancesheetVisible(true)} />}
-                mode="outlined"
-                style={styles.input}
-              />
-            }
-          >
-            {balancesheets.map((item, index) => (
-              <Menu.Item
-                key={index}
-                onPress={() => {
-                  setBalancesheet(item);
-                  setBalancesheetVisible(false);
-                }}
-                title={item}
-              />
-            ))}
-          </Menu>
+        {/* Custom Voucher No */}
+        <View style={{ width: '100%' }}>
+          <CustomInput
+            label="Name"
+            value={name}
+            onChangeText={setName}
+          />
         </View>
+
+        {/* Notes */}
+        <View style={{ width: '100%' }}>
+          <CustomInput
+            label="Notes (optional)"
+            value={note}
+            onChangeText={setNote}
+            multiline = {true}
+          />
+        </View>
+
+        {/* Dropdown for Balancesheet */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Balancesheet</Text>
+          <Dropdown
+            data={balancesheets.map((option) => ({
+              label: option,
+              value: option,
+            }))}
+            onChange={(selectedValue) => {
+              setBalancesheet(selectedValue);
+            }}
+            placeholder="Select "
+            initialValue={balancesheet}
+          />
+        </View>
+        
       </View>
 
       {/* Bill Duration Section */}
-      <View style={styles.section}>
+      <View style={styles.cardview}>
         <Text style={styles.sectionHeader}>Bill Duration</Text>
         <Divider style={styles.divider} />
 
         {/* Date Pickers */}
-        <TextInput
-          label="Start From"
-          value={startDate.toISOString().split("T")[0]}
-          style={styles.input}
-          mode="outlined"
-          editable={false}
-          placeholder="YYYY-MM-DD"
-          right={<TextInput.Icon icon="calendar" onPress={() => setShowDatePicker({ visible: true, type: "start" })} />}
-        />
-        <TextInput
-          label="End On"
-          value={endDate.toISOString().split("T")[0]}
-          style={styles.input}
-          mode="outlined"
-          editable={false}
-          right={<TextInput.Icon icon="calendar" onPress={() => setShowDatePicker({ visible: true, type: "end" })} />}
-        />
-        <TextInput
-          label="Due Date"
-          value={dueDate.toISOString().split("T")[0]}
-          style={styles.input}
-          mode="outlined"
-          editable={false}
-          right={<TextInput.Icon icon="calendar" onPress={() => setShowDatePicker({ visible: true, type: "due" })} />}
-        />
-        <TextInput
-          label="Invoice Date"
-          value={invoiceDate.toISOString().split("T")[0]}
-          style={styles.input}
-          mode="outlined"
-          editable={false}
-          right={<TextInput.Icon icon="calendar" onPress={() => setShowDatePicker({ visible: true, type: "invoice" })} />}
-        />
+        {/* From Date */}
+        <View style={styles.section}>
+                <Text style={styles.label}>From Date</Text>
+                <PaymentDatePicker
+                  initialDate={startDate}
+                  onDateChange={(newDate) => handleDateChange(newDate, "start")}
+                />
+              </View>
 
-        {/* Date Picker Modal */}
-        {showDatePicker.visible && (
-          <DateTimePicker
-            value={
-              showDatePicker.type === "start"
-                ? startDate
-                : showDatePicker.type === "end"
-                ? endDate
-                : showDatePicker.type === "invoice"
-                ? invoiceDate
-                : dueDate
-            }
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={handleDateChange}
+              {/* To Date */}
+        <View style={styles.section}>
+          <Text style={styles.label}>To Date</Text>
+          <PaymentDatePicker
+            initialDate={endDate}
+            onDateChange={(newDate) => handleDateChange(newDate, "end")}
           />
-        )}
-        <MultiSelectDropdown
-          label="members"
-          placeholder="Select Members"
-          options={members}
-          value={selectedMembers}
-          onSelect={setSelectedMembers}
-          mode="outlined"
-        />
+        </View>
+            {/* Due Date */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Due Date</Text>
+          <PaymentDatePicker
+            initialDate={dueDate}
+            onDateChange={(newDate) => handleDateChange(newDate, "due")}
+          />
+        </View>
+            {/* Invoice Date */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Invoice Date</Text>
+          <PaymentDatePicker
+            initialDate={invoiceDate}
+            onDateChange={(newDate) => handleDateChange(newDate, "Invoice")}
+          />
+        </View>
+        
+            {/* Select Members */}
+        <DropdownMultiSelect
+        data={fetchedmembers.map((member) => ({ label: member.label, value: member.value }))}
+        onChange={handleSelectionChange}
+        placeholder="Select Members"
+        initialValues={[]} // Pre-select Option 1
+      />
 
       </View>
 
       {/* Added Items to bill */}
 
       {isEditMode && (
-  <View style={styles.section}>
-    <Text style={styles.sectionHeader}>Bill Items</Text>
-    <FlatList
-      data={billItems}
-      contentContainerStyle={{ paddingBottom: 100 }}
-      keyExtractor={(item) => item.id}
-      scrollEnabled={false} // Disable scrolling
-      renderItem={({ item }) => (
-        <View style={styles.listItem}>
-          <View style={styles.listItemContent}>
-          <Text style={styles.listItemText}>Item Name: {item.itemName}</Text>
-          {item.notes && <Text style={styles.listItemText}>Notes: {item.notes}</Text>}
-          {item.type && <Text style={styles.listItemText}>Type: {item.type}</Text>}
-          {item.ownerAmount && <Text style={styles.listItemText}>Owner Amount: {item.ownerAmount}</Text>}
-          {item.rentAmount && <Text style={styles.listItemText}>Rent Amount: {item.rentAmount}</Text>}
-          {item.closedUnitAmount && <Text style={styles.listItemText}>Closed Unit Amount: {item.closedUnitAmount}</Text>}
-          {item.updatedLedgerAccount && <Text style={styles.listItemText}>updated Ledger Account: {item.updatedLedgerAccount}</Text>}
+        <View style={styles.cardview}>
+          <Text style={styles.sectionHeader}>Bill Items</Text>
+          <FlatList
+            data={billItems}
+            contentContainerStyle={{ paddingBottom: 100 }}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false} // Disable scrolling
+            renderItem={({ item }) => (
+              <View style={styles.listItem}>
+                <View style={styles.listItemContent}>
+                <Text style={styles.listItemText}>Item Name: {item.itemName}</Text>
+                {item.notes && <Text style={styles.listItemText}>Notes: {item.notes}</Text>}
+                {item.type && <Text style={styles.listItemText}>Type: {item.type}</Text>}
+                {item.ownerAmount && <Text style={styles.listItemText}>Owner Amount: {item.ownerAmount}</Text>}
+                {item.rentAmount && <Text style={styles.listItemText}>Rent Amount: {item.rentAmount}</Text>}
+                {item.closedUnitAmount && <Text style={styles.listItemText}>Closed Unit Amount: {item.closedUnitAmount}</Text>}
+                {item.updatedLedgerAccount && <Text style={styles.listItemText}>updated Ledger Account: {item.updatedLedgerAccount}</Text>}
+                {item.groupFrom && <Text style={styles.listItemText}>groupFrom: {item.groupFrom}</Text>}
           
           </View>
           <View style={styles.listItemActions}>
@@ -435,30 +405,34 @@ const CreateSpecialBill = () => {
                 />
               </View>
         </View>
+            )}
+            ListEmptyComponent={<Text>No items available</Text>}
+          />
+        </View>
       )}
-      ListEmptyComponent={<Text>No items available</Text>}
-    />
-  </View>
-)}
 
       {/* Buttons */}
-      <Button
-      mode="contained"
-      onPress={() => {
-        if (!balancesheet) {
-          Alert.alert('Generate Bill', 'Select Balancesheet');
-        } else {
-          // Navigate to the Items Page and pass balancesheet as a parameter
-          router.push({
-            pathname: '/specialBillitems', // Adjust this path based on your routing structure
-            params: { balancesheet }, // Pass the balancesheet value
-          });
-        }
-      }}
-      style={styles.addButton}
-    >
-      Add Bill Item
-    </Button>
+
+    <TouchableOpacity
+     onPress={() => {
+      if (!balancesheet) {
+        Alert.alert('Generate Bill', 'Select Balancesheet');
+      } else {
+        // Navigate to the Items Page and pass balancesheet as a parameter
+        router.push({
+          pathname: '/specialBillitems', // Adjust this path based on your routing structure
+          params: { balancesheet }, // Pass the balancesheet value
+        });
+      }
+    }}
+     style={styles.addButtonNew}>
+      <View style={styles.buttonContent}>
+        <MaterialIcons name="add-circle-outline" size={24} color="#000" />
+        <Text style={styles.addButtonText}>Add Bill Item</Text>
+      </View>
+    </TouchableOpacity>
+
+
     {/* switch - for Advance Payment Settelment */}
       <View style={styles.switchContainer}>
           <Text style={styles.label}>Advance Payment Settelement?</Text>
@@ -472,20 +446,40 @@ const CreateSpecialBill = () => {
     <Button mode="contained" onPress={navigateToNextScreen}>
         Next
       </Button>
-    </ScrollView>
+      </>
+              )}
+              keyExtractor={(item, index) => index.toString()}
+              contentContainerStyle={styles.scrollContainer}
+            />
+
+    </View>
+
+
+    
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-  },
-  section: {
+  container: { flex: 1, backgroundColor: "#FFFFFF",},
+  sectiond: {
     marginBottom: 20,
     backgroundColor: "#f8f9fa",
     borderRadius: 10,
     padding: 15,
     elevation: 2,
+  },
+  cardview: {
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    elevation: 4, // For shadow on Android
+    shadowColor: "#000", // For shadow on iOS
+    shadowOffset: { width: 0, height: 2 }, // For shadow on iOS
+    shadowOpacity: 0.1, // For shadow on iOS
+    shadowRadius: 4, // For shadow on iOS
+    borderWidth: 1, // Optional for outline
+    borderColor: "#e0e0e0", // Optional for outline
   },
   sectionHeader: {
     fontSize: 16,
@@ -536,6 +530,33 @@ const styles = StyleSheet.create({
   },
   switchContainer: { flexDirection: "row", justifyContent: "space-between", marginVertical: 10 },
   label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
+  scrollContainer: { padding: 16 },
+  section: { marginBottom: 10 },
+  
+  
+  addButtonNew: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    elevation: 4, // For shadow (Android)
+    shadowColor: '#000', // For shadow (iOS)
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginLeft: 8,
+  },
 });
 
 export default CreateSpecialBill;

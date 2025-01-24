@@ -1,4 +1,4 @@
-// app/(top-tabs)/_layout.tsx
+import React from "react";
 import {
   MaterialTopTabNavigationEventMap,
   MaterialTopTabNavigationOptions,
@@ -6,6 +6,7 @@ import {
 } from "@react-navigation/material-top-tabs";
 import { withLayoutContext } from "expo-router";
 import { ParamListBase, TabNavigationState } from "@react-navigation/native";
+import AppbarComponent from '../../../../../components/AppbarComponent'; // Adjust the path as per your structure
 
 const { Navigator } = createMaterialTopTabNavigator();
 
@@ -17,11 +18,20 @@ export const MaterialTopTabs = withLayoutContext<
 >(Navigator);
 
 export default function TabLayout() {
+ 
   return (
-    <MaterialTopTabs>
-      <MaterialTopTabs.Screen name="create-bill" options={{ title: "Create Bill" }} />
-      <MaterialTopTabs.Screen name="draft" options={{ title: "Draft" }} />
+    <>
+      {/* Appbar Component */}
+      <AppbarComponent
+        title="Bill Types"
+        source="Admin"
+      />
 
-    </MaterialTopTabs>
+      {/* Material Top Tabs */}
+      <MaterialTopTabs>
+        <MaterialTopTabs.Screen name="create-bill" options={{ title: "Create Bill" }} />
+        <MaterialTopTabs.Screen name="draft" options={{ title: "Draft" }} />
+      </MaterialTopTabs>
+    </>
   );
 }

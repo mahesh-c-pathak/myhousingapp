@@ -19,6 +19,7 @@ const CreateBill = () => {
       <FAB
         style={styles.fab}
         icon="plus"
+        color="white" // Set the icon color to white
         onPress={() => {
           router.push("../CreateSpecialBill");
         }}

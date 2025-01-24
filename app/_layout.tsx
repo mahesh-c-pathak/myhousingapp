@@ -1,9 +1,9 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import React, { useEffect, useState } from "react";
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { SessionProvider, useSession } from "../utils/ctx";
 import { Slot } from "expo-router";
@@ -60,7 +60,7 @@ export default function RootLayout() {
     </SessionProvider>
   );
 }
-
+ 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { isAuthenticated } = useSession();

@@ -3,82 +3,125 @@ import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { db } from "../../../FirebaseConfig";
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc } from 'firebase/firestore';
+import { MaterialIcons } from "@expo/vector-icons"; // Import icon library
 
 const SetupWingsScreen: React.FC = () => {
-  const { totalWings: localTotalWings, name: localName } = useLocalSearchParams();
+  const { societyName: localName } = useLocalSearchParams() as {societyName: string }; // Society name
+
   const router = useRouter();
 
-  const [totalWings, setTotalWings] = useState<string | null>(null);
-  const [name, setName] = useState<string | null>(null);
   const [wings, setWings] = useState<Record<string, any> | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
- 
-  useEffect(() => {
-    const fetchSocietyData = async () => {
-      try {
-        const docRef = doc(db, 'Societies', localName);
-        const docSnapshot = await getDoc(docRef);
+  const [loading, setLoading] = useState<boolean>(true); 
+  const [alreadySetupWings, setAlreadySetupWings] = useState<string[]>([]);
 
-        if (docSnapshot.exists()) {
-          const data = docSnapshot.data();
-          setTotalWings(data.totalWings || localTotalWings); // Fallback to localTotalWings if undefined
-          setName(data.name || localName); // Fallback to localName if undefined
-          setWings(data.wings || null);
+  useEffect(() => {
+    const fetchWingsData = async () => {
+      if (!localName) {
+        console.error("Error: Society name (localName) is missing.");
+        setLoading(false);
+        return;
+      }
+    
+      try {
+        const wingsCollectionRef = collection(db, "Societies", localName, "wings");
+        const wingsSnapshot = await getDocs(wingsCollectionRef);
+    
+        if (!wingsSnapshot.empty) {
+          const wingsData: Record<string, any> = {};
+          const alreadySetupWings: string[] = []; // To store wings with floors
+    
+          // Iterate through each wing and fetch data
+          await Promise.all(
+            wingsSnapshot.docs.map(async (doc) => {
+              const wingKey = doc.id; // Get wing document ID
+              wingsData[wingKey] = doc.data(); // Store wing data
+    
+              // Construct reference to the floors collection for the current wing
+              const floorsCollectionRef = collection(
+                db,
+                "Societies",
+                localName,
+                "wings",
+                wingKey,
+                "floors"
+              );
+    
+              // Check if the floors collection exists and has documents
+              const floorsSnapshot = await getDocs(floorsCollectionRef);
+              if (!floorsSnapshot.empty) {
+                alreadySetupWings.push(wingKey); // Add wing to the setup array
+              }
+            })
+          );
+    
+          setWings(wingsData); // Set the wings data state
+          setAlreadySetupWings(alreadySetupWings); // Update alreadySetupWings state
         } else {
-          // Fallback to local search params if Firestore document doesn't exist
-          setTotalWings(localTotalWings as string);
-          setName(localName as string);
-          setWings(null);
+          setWings(null); // No wings found
         }
       } catch (error) {
-        console.error('Error fetching data from Firestore:', error);
-        // Fallback to local search params in case of error
-        setTotalWings(localTotalWings as string);
-        setName(localName as string);
+        console.error("Error fetching wings data:", error);
         setWings(null);
       } finally {
         setLoading(false);
       }
     };
+    
 
-    fetchSocietyData();
-  }, [localTotalWings, localName]);
+    fetchWingsData();
+  }, [localName]);
 
   const generateCards = () => {
-    const numberOfWings = parseInt(totalWings || '0', 10); // Default to 0 if totalWings is null
-    const cards = [];
-    for (let i = 1; i <= numberOfWings; i++) {
-      const wingLetter = String.fromCharCode(64 + i); // Convert 1 -> A, 2 -> B, etc.
-      const wingKey = `Wing-${wingLetter}`;
-      const wingExists = wings && wings[wingKey];
-      
+    if (!wings) return null;
 
-      cards.push(
+    const cards = Object.keys(wings).map((wingKey) => {
+      const wingData = wings[wingKey];
+      const wingLetter = wingKey.split('-').pop(); // Extracts the wing identifier (e.g., 'A' from 'Wing-A')
+      const isSetup = alreadySetupWings.includes(wingKey); // Check if the wing is in alreadySetupWings
+
+      return (
         <Card
           key={wingKey}
           style={styles.card}
           onPress={() => {
-            if (wingExists) {
-              // Navigate to WingSetupScreen if Wing-${wingLetter} exists
+            if (isSetup) {
+              // Route to WingSetupScreen if alreadySetupWings includes this wingKey
               router.push({
-                pathname: `/(auth)/(SetupWing)/WingSetupScreen`,
-                params: { name, totalWings, Wing: wingKey },
+                pathname: "/WingSetupScreen",
+                params: {
+                  societyName: localName,
+                  Wing: wingLetter,
+                },
               });
             } else {
-              // Navigate to the default route
-              
+              // Default route for wings not in alreadySetupWings
               router.push({
                 pathname: `/Wing-${wingLetter}`,
-                params: { name:localName, totalWings, wing: wingLetter },
+                params: {
+                  societyName: localName,
+                  wing: wingLetter,
+                  totalFloors: wingData.totalFloors,
+                  unitsPerFloor: wingData.unitsPerFloor,
+                },
               });
             }
           }}
         >
-          <Card.Title title={`Setup ${wingLetter}`} />
+          <Card.Title
+           title={`Setup Wing ${wingLetter}`} 
+           right={() =>
+            isSetup ? (
+              <MaterialIcons name="check-circle" size={24} color="green" />
+            ) : (
+              <MaterialIcons name="cancel" size={24} color="red" />
+            )
+          }
+           />
         </Card>
       );
-    }
+    });
+
     return cards;
   };
 
@@ -90,10 +133,10 @@ const SetupWingsScreen: React.FC = () => {
     );
   }
 
-  if (!totalWings || !name) {
+  if (!wings) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Unable to fetch data. Please check your connection.</Text>
+        <Text style={styles.errorText}>No wings data found. Please check your connection or society details.</Text>
       </View>
     );
   }

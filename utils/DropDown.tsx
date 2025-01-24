@@ -1,12 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   FlatList,
+  Modal,
   TouchableWithoutFeedback,
-  Platform,
 } from "react-native";
 import { AntDesign } from "@expo/vector-icons";
 
@@ -17,24 +17,35 @@ type OptionItem = {
 
 interface DropDownProps {
   data: OptionItem[];
-  onChange: (value: string) => void; // Change type to only pass `value`
+  onChange: (value: string) => void;
   placeholder: string;
+  initialValue?: string;
 }
 
-export default function Dropdown({ data, onChange, placeholder }: DropDownProps) {
+export default function Dropdown({
+  data,
+  onChange,
+  placeholder,
+  initialValue = "",
+}: DropDownProps) {
   const [expanded, setExpanded] = useState(false);
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialValue);
 
   const toggleExpanded = useCallback(() => setExpanded(!expanded), [expanded]);
 
   const onSelect = useCallback(
     (item: OptionItem) => {
-      onChange(item.value); // Pass only the value
-      setValue(item.label); // Update the displayed label
-      setExpanded(false); // Close dropdown
+      onChange(item.value);
+      setValue(item.label);
+      setExpanded(false);
     },
     [onChange]
   );
+
+  // Synchronize `value` state with `initialValue` prop
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue]);
 
   return (
     <View style={styles.container}>
@@ -46,28 +57,38 @@ export default function Dropdown({ data, onChange, placeholder }: DropDownProps)
         <Text style={styles.text}>{value || placeholder}</Text>
         <AntDesign name={expanded ? "caretup" : "caretdown"} />
       </TouchableOpacity>
+
       {expanded && (
-        <View style={styles.dropdown}>
+        <Modal
+          transparent
+          animationType="fade"
+          visible={expanded}
+          onRequestClose={() => setExpanded(false)}
+        >
           <TouchableWithoutFeedback onPress={() => setExpanded(false)}>
-            <View style={styles.backdrop} />
+            <View style={styles.modalBackdrop}>
+              <View style={styles.modalContainer}>
+                <FlatList
+                  keyExtractor={(item) => item.value}
+                  data={data}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.optionItem}
+                      activeOpacity={0.8}
+                      onPress={() => onSelect(item)}
+                    >
+                      <Text>{item.label}</Text>
+                    </TouchableOpacity>
+                  )}
+                  ItemSeparatorComponent={() => (
+                    <View style={styles.separator} />
+                  )}
+                  style={styles.optionList}
+                />
+              </View>
+            </View>
           </TouchableWithoutFeedback>
-          <FlatList
-            keyExtractor={(item) => item.value}
-            data={data}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.optionItem}
-                onPress={() => onSelect(item)}
-              >
-                <Text>{item.label}</Text>
-              </TouchableOpacity>
-            )}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            style={styles.optionList}
-            scrollEnabled={false} // Disable scrolling
-          />
-        </View>
+        </Modal>
       )}
     </View>
   );
@@ -93,21 +114,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     opacity: 0.8,
   },
-  dropdown: {
-    position: "absolute",
-    top: Platform.OS === "android" ? 60 : 55, // Adjust based on button height
-    width: "100%",
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    width: "80%",
     backgroundColor: "white",
     borderRadius: 8,
+    maxHeight: "50%",
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 2, // For Android
-    zIndex: 1000,
+    elevation: 10,
   },
   optionItem: {
-    padding: 10,
+    padding: 15,
     justifyContent: "center",
   },
   separator: {
@@ -116,13 +142,5 @@ const styles = StyleSheet.create({
   },
   optionList: {
     maxHeight: 250,
-  },
-  backdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: -1,
   },
 });

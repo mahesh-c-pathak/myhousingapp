@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import { TextInput, Button, Text, useTheme, RadioButton } from 'react-native-paper';
 import { auth, db } from '../../FirebaseConfig';
-import { createUserWithEmailAndPassword, sendEmailVerification, AuthError } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, AuthError, updateProfile  } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 
 type AuthErrorType = AuthError & {
@@ -24,6 +24,9 @@ const RegisterScreen: React.FC = () => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+
+      // Update the displayName using updateProfile function
+      await updateProfile(user, { displayName: name });
 
       await sendEmailVerification(user);
 

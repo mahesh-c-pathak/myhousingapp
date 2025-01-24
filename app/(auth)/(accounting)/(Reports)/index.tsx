@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TouchableOpacity } from "react-native";
-import { Text, IconButton, FAB, Card } from "react-native-paper";
+import { Text, IconButton, FAB, Card, Appbar } from "react-native-paper";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { useRouter } from "expo-router";
 import type { LinkProps } from "expo-router";
@@ -11,21 +11,20 @@ const ReportsScreen = () => {
     { label: "BalanceSheet", icon: "book", route: "/BalanceSheet" },
     { label: "Income And Expenditure", icon: "file-document", route: "/Income-And-Expenditure" },
     { label: "Receipt Summary", icon: "file-document", route: "/ReceiptSummary" },
-    { label: "Cash Book", icon: "eye", route: "/" },
-    { label: "Bank Book", icon: "chart-line", route: "/" },
-    { label: "BalanceSheet New", icon: "book", route: "/BalanceSheetNew" },
+    { label: "Cash Book", icon: "eye", route: "/CashBook" },
+    { label: "Bank Book", icon: "chart-line", route: "/BankBook" },
+    
     
   ];
 
-  const navigation = useNavigation();
-  useEffect(() => {
-    navigation.setOptions({
-        headerTitle:"Reports",
-    })
-  }, []);
-
   return (
     <View style={styles.container}>
+
+      {/* Top Appbar */}
+      <Appbar.Header style={styles.header}>
+            <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+            <Appbar.Content title="Reports" titleStyle={styles.titleStyle} />
+          </Appbar.Header>
       
 
       {/* Main Balance Section */}
@@ -33,13 +32,8 @@ const ReportsScreen = () => {
         <Card.Content>
           {/* Title with dots icon */}
           <View style={styles.titleRow}>
-            <Text style={styles.sectionTitle}>Main Balance</Text>
-            <IconButton
-              icon="dots-vertical"
-              onPress={() => {}}
-              size={20}
-              style={styles.iconButton}
-            />
+            <Text style={styles.sectionTitle}>Reports</Text>
+            
           </View>
 
           {/* Grid */}
@@ -62,14 +56,6 @@ const ReportsScreen = () => {
         </Card.Content>
       </Card>
 
-      {/* Floating Action Button */}
-      <FAB
-        style={styles.fab}
-        icon="plus"
-        onPress={() => {
-          // Handle FAB action
-        }}
-      />
     </View>
   );
 };
@@ -77,19 +63,11 @@ const ReportsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#FFFFFF",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    backgroundColor: "#6200ee",
-  },
-  headerTitle: {
-    fontSize: 18,
-    color: "#fff",
-  },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+  
   card: {
     margin: 16,
     borderRadius: 8,
@@ -128,12 +106,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 12,
     color: "#6200ee",
-  },
-  fab: {
-    position: "absolute",
-    right: 16,
-    bottom: 16,
-    backgroundColor: "#6200ee",
   },
 });
 

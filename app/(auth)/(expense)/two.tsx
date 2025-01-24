@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, Dimensions } from 'react-native';
+import { View, StyleSheet, FlatList, Dimensions, ScrollView } from 'react-native';
 import { Card, Text, ActivityIndicator } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
@@ -8,7 +8,7 @@ import { db } from '../../../FirebaseConfig';
 const CardGrid: React.FC = () => {
   const [gridData, setGridData] = useState<{ rows: number; columns: number } | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter(); // For navigation
+  const router = useRouter();
 
   useEffect(() => {
     const fetchGridData = async () => {
@@ -54,13 +54,13 @@ const CardGrid: React.FC = () => {
 
   const { rows, columns } = gridData;
   const data = generateNumbers(rows, columns);
-  const cardWidth = Dimensions.get('window').width / columns - 10;
+  // const cardWidth = Dimensions.get('window').width / columns - 10;
 
   const renderItem = ({ item }: { item: number }) => (
     <Card
-      style={[styles.card, { width: cardWidth }]}
+      style={[styles.card]}
       mode="elevated"
-      onPress={() => router.push(`/four?number=${item}`)} // Navigate to detail screen
+      onPress={() => router.push(`/four?number=${item}`)}
     >
       <Card.Content>
         <Text variant="titleMedium" style={styles.cardText}>
@@ -71,14 +71,17 @@ const CardGrid: React.FC = () => {
   );
 
   return (
-    <FlatList
-      key={`columns-${columns}`} // Force re-render when numColumns changes
-      data={data}
-      keyExtractor={(item) => item.toString()}
-      renderItem={renderItem}
-      numColumns={columns}
-      contentContainerStyle={styles.container}
-    />
+    <ScrollView horizontal contentContainerStyle={styles.scrollViewContainer}>
+      <FlatList
+        key={`columns-${columns}`}
+        data={data}
+        keyExtractor={(item) => item.toString()}
+        renderItem={renderItem}
+        numColumns={columns}
+        contentContainerStyle={styles.container}
+        scrollEnabled={false} // Disable FlatList's vertical scrolling
+      />
+    </ScrollView>
   );
 };
 
@@ -89,6 +92,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  scrollViewContainer: {
+    flexDirection: 'row',
   },
   container: {
     justifyContent: 'center',

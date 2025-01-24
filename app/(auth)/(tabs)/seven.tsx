@@ -1,186 +1,227 @@
-import React, { useState, useEffect } from 'react';
-import { View, FlatList, StyleSheet, ActivityIndicator, Alert } from 'react-native';
-import { Text, Card, Title, Paragraph, Divider, Button } from 'react-native-paper';
-import { collection, onSnapshot } from 'firebase/firestore';  // Ensure onSnapshot is correctly imported
-import { db } from '../../../FirebaseConfig';
-
-// Define the interface for payment status
-interface Payment {
-  status: 'pending' | 'paid';
-  paidAt: string | null;
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  useWindowDimensions,
+  TouchableWithoutFeedback
+} from "react-native";
+import PaymentDatePicker from "../../../utils/paymentDate";
+import { getCurrentFinancialYear, calculateFinancialYears } from "../../../utils/financialYearHelpers";
+import AppbarComponent from '../../../components/AppbarComponent';
+import { Stack, useRouter } from 'expo-router';
+import AppbarMenuComponent from '../../../components/AppbarMenuComponent';
+interface FinancialYear {
+  label: string;
+  start: string;
+  end: string;
 }
 
-// Define the type for the report data
-interface Report {
-  id: string;
-  month: string;
-  amount: number;
-  totalResidents: number;
-  paidResidents: number;
-  pendingResidents: number;
-}
+const IncomeAndExpenditureScreen = () => {
+  const router = useRouter();
+  const [financialYears, setFinancialYears] = useState<FinancialYear[]>([]);
+  const { width } = useWindowDimensions();
 
-const AdminMonthlyReport: React.FC = () => {
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fromDate, setFromDate] = useState(new Date(Date.now()));
+  const [toDate, setToDate] = useState(new Date(Date.now()));
 
-  // Fetch and listen for real-time updates using onSnapshot
-  const fetchMonthlyReports = () => {
-    setLoading(true);
-    setError(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+  
+      const handleMenuOptionPress = (option: string) => {
+        console.log(`${option} selected`);
+        setMenuVisible(false);
+      };
 
-    try {
-      // Ensure that the onSnapshot is being called on the collection
-      const unsubscribe = onSnapshot(collection(db, 'maintenance_requests'), (snapshot) => {
-        const reportData: Report[] = [];
+  const handleFilterPress = () => {
+    console.log('Filter pressed');
+  };
 
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const payments = data?.payments ?? {}; // Ensure payments is an object
+  const closeMenu = () => {
+    setMenuVisible(false);
+  };
 
-          if (typeof payments !== 'object') return; // Skip invalid entries
-
-          const paymentsArray = Object.values(payments) as Payment[];
-
-          const totalResidents = Object.keys(payments).length;
-          const paidResidents = paymentsArray.filter((p: Payment) => p.status === 'paid').length;
-          const pendingResidents = totalResidents - paidResidents;
-
-          reportData.push({
-            id: doc.id,
-            month: data.month ?? 'Unknown Month',
-            amount: data.amount ?? 0,
-            totalResidents,
-            paidResidents,
-            pendingResidents,
-          });
-        });
-
-        setReports(reportData);
-        setLoading(false); // Stop loading once data is received
-      });
-
-      // Cleanup function to unsubscribe from real-time updates
-      return unsubscribe;
-    } catch (err) {
-      console.error('Error fetching monthly reports:', err);
-      setError('Failed to load reports. Please check your connection and try again.');
-      setLoading(false);
-    }
+  const handleThreeDotPress = () => {
+    console.log('Three dot menu pressed');
   };
 
   useEffect(() => {
-    const unsubscribe = fetchMonthlyReports();
+    // Set initial state for current financial year
+    const { startDate, endDate } = getCurrentFinancialYear();
+    setFromDate(new Date(startDate));
+    setToDate(new Date(endDate));
 
-    // Cleanup the listener when the component is unmounted
-    return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, []); // Empty dependency array ensures this is only run once when the component mounts
+    // Calculate previous 4 financial years
+    const today = new Date();
+    const currentYear = today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
+    const years = calculateFinancialYears(currentYear, 4); // Get previous 4 financial years
+    setFinancialYears(years);
+  }, []);
 
-  const renderItem = ({ item }: { item: Report }) => (
-    <Card style={styles.card}>
-      <Card.Content>
-        <Title style={styles.cardTitle}>{item.month}</Title>
-        <Paragraph style={styles.cardParagraph}>Amount: ${item.amount.toFixed(2)}</Paragraph>
-        <Paragraph style={styles.cardParagraph}>Total Residents: {item.totalResidents}</Paragraph>
-        <Paragraph style={styles.cardParagraph}>Paid: {item.paidResidents}</Paragraph>
-        <Paragraph style={styles.cardParagraph}>Pending: {item.pendingResidents}</Paragraph>
-      </Card.Content>
-      <Divider />
-      <Card.Actions>
-        <Button
-          mode="contained"
-          onPress={() => Alert.alert('Details', `Viewing details for ${item.month}`)}
-        >
-          View Details
-        </Button>
-      </Card.Actions>
-    </Card>
-  );
+  const handleYearSelect = (start: string, end: string) => {
+    setFromDate(new Date(start)); // Set the start date for the date picker
+    setToDate(new Date(end)); // Set the end date for the date picker
+  };
+
+  const buttonWidth = (width - 50) / 4; // Calculate width for 4 buttons with padding
 
   return (
+    <TouchableWithoutFeedback onPress={closeMenu}>
     <View style={styles.container}>
-      <Text style={styles.title}>Monthly Maintenance Reports</Text>
-      {loading ? (
-        <ActivityIndicator animating={true} size="large" style={styles.loader} />
-      ) : error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Button mode="contained" onPress={fetchMonthlyReports}>
-            Retry
-          </Button>
-        </View>
-      ) : (
-        <FlatList
-          data={reports}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          ListEmptyComponent={<Text style={styles.emptyText}>No reports available</Text>}
-          contentContainerStyle={reports.length === 0 ? styles.emptyList : undefined}
-        />
+      
+      <Stack.Screen options={{ headerShown: false }} />
+      {/* Header */}
+      <AppbarComponent
+        title="Sample Title "
+        source="Admin"
+        onPressFilter={handleFilterPress}
+        onPressThreeDot={() => setMenuVisible(!menuVisible)} // Toggle menu visibility
+      />
+
+      {/* Three-dot Menu */}
+      {/* Custom Menu */}
+      {menuVisible && (
+        <AppbarMenuComponent
+        items={["Edit Ledger", "Delete Ledger", "Download PDF", "Download Excel"]}
+        onItemPress={handleMenuOptionPress}
+        closeMenu={closeMenu}
+      />
       )}
-    </View>
+      
+
+      {/* Financial Year Buttons */}
+      <View style={styles.fyContainer}>
+        {financialYears.map((year) => (
+          <TouchableOpacity
+            key={year.label}
+            style={[styles.fyButton, { width: buttonWidth }]}
+            onPress={() => handleYearSelect(year.start, year.end)}
+          >
+            <Text style={styles.fyText}>{year.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Date Inputs */}
+      <View style={styles.dateInputsContainer}>
+        <View style={styles.section}>
+          <PaymentDatePicker initialDate={fromDate} onDateChange={setFromDate} />
+        </View>
+        <View style={styles.section}>
+          <PaymentDatePicker initialDate={toDate} onDateChange={setToDate} />
+        </View>
+
+        <TouchableOpacity style={styles.goButton}>
+          <Text style={styles.goButtonText}>Go</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Bank and Cash Balances */}
+      <View style={styles.balancesContainer}>
+        <View style={[styles.balanceCard, styles.bankCard]}>
+          <Text style={styles.balanceTitle}>Bank</Text>
+          <Text style={styles.balanceText}>
+            Opening Bal:<Text style={styles.balanceTextAmt}> ₹ 0.00</Text>
+          </Text>
+          <Text style={styles.balanceText}>
+            Closing Bal:<Text style={styles.balanceTextAmt}>₹ 0.00</Text>
+          </Text>
+        </View>
+        <View style={[styles.balanceCard, styles.cashCard]}>
+          <Text style={styles.balanceTitle}>Cash</Text>
+          <Text style={styles.balanceText}>
+            Opening Bal:<Text style={styles.balanceTextAmt}> ₹ 0.00</Text>
+          </Text>
+          <Text style={styles.balanceText}>
+            Closing Bal:<Text style={styles.balanceTextAmt}>₹ 0.00</Text>
+          </Text>
+        </View>
+      </View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 
+// Styles...
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#f6f6f6',
+  container: { flex: 1, backgroundColor: "#FFFFFF",},
+  header: {
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 10,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
-    color: '#6200ea',
+  fyContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
-  loader: {
-    marginTop: 20,
-  },
-  card: {
-    marginVertical: 8,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: 'white',
+  fyButton: {
+    backgroundColor: "#f0f0f0",
+    borderRadius: 5,
+    paddingVertical: 10,
+    marginBottom: 5,
+    alignItems: "center",
+    marginHorizontal: 5,
     elevation: 2,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
+  fyText: {
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
   },
-  cardParagraph: {
+  dateInputsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  goButton: {
+    backgroundColor: "#28a745",
+    justifyContent: "center", // Center text vertically
+    alignItems: "center", // Center text horizontally
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 5,
+    marginBottom: 10,
+  },
+  goButtonText: {
+    color: "#fff",
     fontSize: 16,
-    marginVertical: 4,
-    color: '#333',
+    fontWeight: "bold",
   },
-  errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  balancesContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  balanceCard: {
     flex: 1,
+    padding: 8,
+    borderRadius: 5,
+    marginHorizontal: 5,
+    elevation: 2,
   },
-  errorText: {
-    textAlign: 'center',
-    fontSize: 16,
-    color: '#d32f2f',
-    marginBottom: 16,
+  bankCard: {
+    backgroundColor: "#d6eaff",
   },
-  emptyText: {
-    textAlign: 'center',
-    fontSize: 16,
-    color: '#999',
-    marginTop: 20,
+  cashCard: {
+    backgroundColor: "#d1f7d6",
   },
-  emptyList: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  balanceTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 5,
   },
+  balanceText: {
+    fontSize: 12,
+    marginBottom: 5,
+  },
+  balanceTextAmt: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  section: { flex: 1, margin: 5 },
 });
 
-export default AdminMonthlyReport;
+export default IncomeAndExpenditureScreen;

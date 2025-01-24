@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, TextInput, TouchableOpacity, StyleSheet, Text } from "react-native";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 
@@ -11,6 +11,13 @@ const PaymentDatePicker = ({
 }) => {
   const [selectedDate, setSelectedDate] = useState(initialDate ?? new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+    // Sync the selectedDate with changes in the initialDate prop
+    useEffect(() => {
+      if (initialDate) {
+        setSelectedDate(initialDate);
+      }
+    }, [initialDate]);
 
   const formatDate = (date: Date) => {
     const day = String(date.getDate()).padStart(2, "0");
@@ -38,7 +45,6 @@ const PaymentDatePicker = ({
           value={formatDate(selectedDate)}
           editable={false}
         />
-        <Text style={styles.calendarIcon}>📅</Text>
       </TouchableOpacity>
 
       {showDatePicker && (
@@ -56,7 +62,7 @@ const PaymentDatePicker = ({
 export default PaymentDatePicker;
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 16 },
+  container: { marginBottom: 5 },
   dateInputContainer: { flexDirection: "row", alignItems: "center", marginVertical: 8 },
   dateInput: { flex: 1, borderWidth: 1, borderColor: "#ddd", borderRadius: 4, padding: 10, fontSize: 16 },
   calendarIcon: { fontSize: 20, marginLeft: 8 },

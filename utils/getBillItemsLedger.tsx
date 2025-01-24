@@ -10,6 +10,7 @@ interface Item {
     rentAmount?: number;
     closedUnitAmount?: number;
     ledgerAccount?: string;
+    groupFrom?: string
   }
 
 // Function to get `updatedLedgerAccount` and amount based on residentType
@@ -27,6 +28,7 @@ export const getBillItemsLedger = async (
   
       const billData = billSnapshot.data();
       const items: Item[] = billData?.items || [];
+      const invoiceDate =   billData?.invoiceDate
   
       // Extract relevant data based on residentType
       const results = items.map((item) => {
@@ -42,7 +44,9 @@ export const getBillItemsLedger = async (
         return {
           updatedLedgerAccount: item.updatedLedgerAccount,
           ledgerAccount: item.ledgerAccount, // Include ledgerAccount here
+          groupFrom: item.groupFrom,
           amount,
+          invoiceDate,
         };
       });
   

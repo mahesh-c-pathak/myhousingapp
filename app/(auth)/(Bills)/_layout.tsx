@@ -13,6 +13,7 @@ export default function Layout() {
         headerStyle: { backgroundColor: "#6200ee" },
         headerTintColor: "#fff",
         headerTitleStyle: { fontWeight: "bold" },
+        headerShown:false,
         
       }}
     />

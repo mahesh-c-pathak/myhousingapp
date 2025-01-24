@@ -1,12 +1,22 @@
 import React from "react";
-import { ScrollView, StyleSheet } from "react-native";
-import { List, Avatar, Divider, Surface } from "react-native-paper";
+import { ScrollView, StyleSheet, View, Text, TouchableOpacity } from "react-native";
+import { List, Avatar, Divider, Surface, Appbar } from "react-native-paper";
 import { useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AppbarComponent from '../../../components/AppbarComponent';
+
+type Option = {
+  title: string;
+  description: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap; // Enforce valid icon names
+  route: `/${string}`; // Ensure the route starts with "/"
+};
 
 const BillsScreen = () => {
   const router = useRouter();
 
-  const options = [
+
+  const options: Option[] = [
     {
       title: "Generate Maintenance Bills",
       description:
@@ -57,40 +67,80 @@ const BillsScreen = () => {
   ];
 
   return (
-    <ScrollView style={styles.container}>
-      {options.map((option, index) => (
-        <React.Fragment key={index}>
-          <Surface style={styles.card}>
-            <List.Item
-              title={option.title}
-              description={option.description}
-              left={(props) => (
-                <Avatar.Icon {...props} icon={option.icon} style={styles.icon} />
-              )}
-              onPress={() => router.push(option.route)} // Navigate to respective route
-            />
-          </Surface>
-          <Divider />
-        </React.Fragment>
-      ))}
-    </ScrollView>
+
+    <View style={styles.container}>
+      {/* Top Appbar */}
+      <AppbarComponent
+        title="Bills"
+        source="Admin"
+      />
+      
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        {options.map((option, index) => (
+          <TouchableOpacity
+            key={index}
+            style={styles.card}
+            onPress={() => router.push(option.route)}
+          >
+            <View style={styles.cardContent}>
+              <MaterialCommunityIcons
+                name={option.icon}
+                size={30}
+                
+                style={styles.icon}
+              />
+              <View style={styles.textContainer}>
+                <Text style={styles.title}>{option.title}</Text>
+                <Text style={styles.description}>{option.description}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
+  container: { flex: 1, backgroundColor: "#FFFFFF",},
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+  scrollcontainer: {
     padding: 10,
   },
+  
+  scrollContainer: {
+    paddingHorizontal: 10,
+    paddingVertical: 16,
+  },
   card: {
-    marginBottom: 10,
-    elevation: 2,
+    backgroundColor: "#fff",
     borderRadius: 8,
-    overflow: "hidden",
+    elevation: 2,
+    marginBottom: 16,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  cardContent: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   icon: {
-    backgroundColor: "#6200ee",
+    marginRight: 12,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: 4,
+  },
+  description: {
+    fontSize: 14,
+    color: "#666",
   },
 });
 

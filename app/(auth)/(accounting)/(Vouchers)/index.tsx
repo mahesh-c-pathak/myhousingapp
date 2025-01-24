@@ -1,14 +1,27 @@
 import React from "react";
 import { StyleSheet, View, FlatList } from "react-native";
-import { Card, Text, useTheme } from "react-native-paper";
+import { Card, Text, useTheme, Appbar } from "react-native-paper";
 import { useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+
+type MaterialCommunityIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+
+type ValidRoutes =
+  | "/Expense"
+  | "/Income"
+  | "/Receipt"
+  | "/Purchase"
+  | "/Cash-Withdrawal"
+  | "/Cash-Deposit"
+  | "/Cash-To-Cash-Transfer"
+  | "/Bank-To-Bank-Transfer"
+  | "/Journal";
 
 type VoucherItem = {
   id: string;
   title: string;
-  icon: string;
-  route: string;
+  icon: MaterialCommunityIconName; // Use the correct type for MaterialCommunityIcons
+  route: ValidRoutes; // Use a union of valid route strings
 };
 
 const vouchers: VoucherItem[] = [
@@ -23,7 +36,7 @@ const vouchers: VoucherItem[] = [
   { id: "9", title: "Journal", icon: "book", route: "/Journal" },
 ];
 
-const VoucherScreen: React.FC = () => {
+const index: React.FC = () => {
   const theme = useTheme();
   const router = useRouter();
   
@@ -45,6 +58,12 @@ const VoucherScreen: React.FC = () => {
   );
   return (
     <View style={styles.container}>
+      {/* Top Appbar */}
+      <Appbar.Header style={styles.header}>
+        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+        <Appbar.Content title="Vouchers" titleStyle={styles.titleStyle} />
+      </Appbar.Header>
+      
       <FlatList
         data={vouchers}
         keyExtractor={(item) => item.id}
@@ -59,9 +78,10 @@ const VoucherScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
     backgroundColor: "#f5f5f5",
   },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   grid: {
     justifyContent: "space-between",
   },
@@ -84,4 +104,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default VoucherScreen;
+export default index;

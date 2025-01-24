@@ -9,6 +9,7 @@ type CustomInputProps = {
   secureTextEntry?: boolean;
   keyboardType?: 'default' | 'email-address' | 'numeric';
   error?: string;
+  multiline?: boolean; // Added multiline prop
 };
 
 const CustomInput: React.FC<CustomInputProps> = ({
@@ -19,17 +20,24 @@ const CustomInput: React.FC<CustomInputProps> = ({
   secureTextEntry = false,
   keyboardType = 'default',
   error,
+  multiline = false, // Default multiline to false
 }) => {
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
       <TextInput
-        style={[styles.input, error && styles.errorInput]}
+        style={[
+          styles.input, 
+          multiline && styles.multilineInput, // Apply multiline styles if true 
+          error && styles.errorInput
+        ]}
         value={value}
         placeholder={placeholder}
         onChangeText={onChangeText}
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
+        multiline={multiline} // Pass multiline prop to TextInput
+        numberOfLines={multiline ? 4 : 1} // Set default number of lines for multiline
       />
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
@@ -44,6 +52,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     fontSize: 14,
     color: '#333',
+    fontWeight:'bold'
   },
   input: {
     borderWidth: 1,
@@ -61,6 +70,10 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 12,
     color: 'red',
+  },
+  multilineInput: {
+    height: 100, // Adjust height for multiline input
+    textAlignVertical: 'top', // Align text to the top for multiline
   },
 });
 

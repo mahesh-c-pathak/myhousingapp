@@ -8,7 +8,7 @@ const adminDashboardScreen = () => {
   const router = useRouter();
   const { role, societyName: societyNameParam } = useLocalSearchParams();
   const { societyName, setSocietyName } = useSociety();
-
+ 
   useEffect(() => {
     if (societyNameParam) {
       setSocietyName(societyNameParam as string); // Update context value
@@ -44,7 +44,7 @@ const adminDashboardScreen = () => {
   ];
 
   const buildingItems = [
-    { label: 'Wings', icon: 'office-building', route: "/(SetupWing)/SetupWingsScreen", params: { name: 'New Home Test' } },
+    { label: 'Wings', icon: 'office-building', route: "/(SetupWing)/SetupWingsScreen", params: {societyName } },
     { label: 'Building Info', icon: 'information-outline' },
     { label: 'Rules', icon: 'gavel' },
     { label: 'Documents', icon: 'folder' },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TouchableOpacity } from "react-native";
-import { Text, IconButton, FAB, Card } from "react-native-paper";
+import { Text, IconButton, FAB, Card, Appbar } from "react-native-paper";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { useRouter } from "expo-router";
 import type { LinkProps } from "expo-router";
@@ -9,14 +9,13 @@ const BalanceSheetScreen = () => {
   const router = useRouter();
   const gridData:Array<{ label: string; icon: string; route?: LinkProps["href"]; value?: string }> = [
     { label: "Ledger Accounts", icon: "book", route: "/LedgerAccountsScreen" },
-    { label: "Vouchers", icon: "file-document", route: "/vouchers" },
+    { label: "Vouchers", icon: "file-document", route: "/(Vouchers)" },
     { label: "Transactions", icon: "eye", route: "/TransactionScreen" },
     { label: "Reports", icon: "chart-line", route: "/(Reports)" },
     { label: "Opening Balances", icon: "pencil" },
     { label: "Cash", icon: "file-document", value: "0.00" },
     { label: "Bank", icon: "file-document", value: "2000.00" },
     { label: "Total Balance", icon: "file-document", value: "2000.00" },
-    { label: "Ledger Accounts New", icon: "book", route: "/LedgerAccountsScreenNew" },
   ];
 
   const navigation = useNavigation();
@@ -28,7 +27,11 @@ const BalanceSheetScreen = () => {
 
   return (
     <View style={styles.container}>
-      
+      {/* Top Appbar */}
+      <Appbar.Header style={styles.header}>
+        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+        <Appbar.Content title="Balance Sheet" titleStyle={styles.titleStyle} />
+      </Appbar.Header>
 
       {/* Main Balance Section */}
       <Card style={styles.card}>
@@ -68,6 +71,7 @@ const BalanceSheetScreen = () => {
       <FAB
         style={styles.fab}
         icon="plus"
+        color="white" // Set the icon color to white
         onPress={() => {
           // Handle FAB action
         }}
@@ -81,13 +85,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    backgroundColor: "#6200ee",
-  },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+
   headerTitle: {
     fontSize: 18,
     color: "#fff",

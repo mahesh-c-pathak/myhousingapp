@@ -72,7 +72,13 @@ const VoucherDetails = () => {
 
       {/* Balance Section */}
       <Card style={styles.balanceCard}>
-        <Text style={styles.balanceText}>Current Balance: ₹ 5.00</Text>
+      {type == "Advance" && (
+        <Text style={styles.balanceText}>Current Balance: ₹ {parseFloat(formattedamount).toFixed(2)}</Text>
+      )}
+      {type == "Refund" && (
+        <Text style={styles.balanceText}>Refund Amount: ₹ {parseFloat(formattedamount).toFixed(2)}</Text>
+      )}
+        
       </Card>
 
       {/* Download Button */}

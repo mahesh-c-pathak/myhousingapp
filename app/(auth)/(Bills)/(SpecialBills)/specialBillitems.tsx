@@ -5,6 +5,8 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { collection, onSnapshot, QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig"; // Adjust the path to your Firebase config file
 
+import AppbarComponent from '../../../../components/AppbarComponent';
+
 // Define TypeScript type for a bill item
 interface BillItem {
   id: string;
@@ -45,7 +47,7 @@ const specialBillitems: React.FC = () => {
   const handleItemPress = (item: BillItem) => {
     router.push({
       pathname: "/AddSpecialBillItem", // Adjust this path based on your routing structure
-      params: item, // Pass the full item data as parameters
+      params: item as any, // Cast to `any` to bypass the type error
     });
   };
 
@@ -56,6 +58,11 @@ const specialBillitems: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {/* Top Appbar */}
+    <AppbarComponent
+        title="Items"
+        source="Admin"
+      />
       {/* List of Bill Items */}
       <FlatList
         data={billItems}
@@ -78,11 +85,7 @@ const specialBillitems: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
-    paddingTop: 10,
-  },
+  container: { flex: 1, backgroundColor: "#FFFFFF",},
   listItem: {
     backgroundColor: "#ffffff",
     marginVertical: 5,

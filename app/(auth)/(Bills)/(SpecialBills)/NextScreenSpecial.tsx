@@ -9,6 +9,10 @@ import { generateVoucherNumber } from "../../../../utils/generateVoucherNumber";
 import { updateLedger } from "../../../../utils/updateLedger";
 import { getBillItemsLedger } from "../../../../utils/getBillItemsLedger";
 
+import AppbarComponent from '../../../../components/AppbarComponent';
+
+import { useSociety } from "../../../../utils/SocietyContext";
+
 // Define the types for parsed items
 interface BillItem {
   itemName: string;
@@ -16,6 +20,7 @@ interface BillItem {
   rentAmount?: number;
   closedAmount?: number;
   ledgerAccount?: string;
+  groupFrom?: string;
   updatedLedgerAccount?: string;
 }
 
@@ -38,6 +43,7 @@ interface WingData {
 }
 
 const NextScreenSpecial = () => {
+  const { societyName } = useSociety();
   const {
     name,
     note,
@@ -45,6 +51,7 @@ const NextScreenSpecial = () => {
     startDate,
     endDate,
     dueDate,
+    invoiceDate,
     members,
     wings,
     items,
@@ -109,120 +116,84 @@ const NextScreenSpecial = () => {
                 startDate,
                 endDate,
                 dueDate,
+                invoiceDate,
                 members,
                 items: parsedItems,
                 billType: "Special Bill",
                 billNumber,
-                
               };
-              let amount = 0;
-              let residentType = ""
   
+              // Create bill in Firestore
               await setDoc(doc(db, "bills", billNumber), billData);
-
-              const societiesDocRef = doc(db, "Societies", "New Home Test");
-              const societyDocSnap = await getDoc(societiesDocRef);
   
-              if (societyDocSnap.exists()) {
-                const societyData = societyDocSnap.data();
-                const societyWings: Record<string, WingData> = societyData.wings;
-                
+              const wingsCollectionRef = collection(db, "Societies", societyName, "wings");
+              const wingsSnapshot = await getDocs(wingsCollectionRef);
+  
+              if (!wingsSnapshot.empty) {
                 const selectedMembers = members
-                ? (members as string).split(",").map((member) => member.trim())
-                : [];
-
-                // Determine unique wings from selected members
-              const selectedWings = Array.from(
-                new Set(selectedMembers.map((member) => member.split(" ")[0]))
-              );
-
-              
-
-              const updatePromises = [];
+                  ? (members as string).split(",").map((member) => member.trim())
+                  : [];
   
-                for (const wing of selectedWings) {
-                  const wingData = societyWings[wing];
-                  if (!wingData) {
-                    console.warn(`Wing ${wing} not found in society.`);
+                const updatePromises = [];
+  
+                // Iterate through selected members
+                for (const member of selectedMembers) {
+                  const [floor, wing , flat] = member.split(" ");
+                  console.log(`Processing: Wing=${wing}, Floor=${floor}, Flat=${flat}`);
+
+                  // Adjust floor format to match database format (e.g., "1" → "floor 1")
+                  const formattedFloor = `Floor ${floor}`;
+  
+                  const floorsCollectionRef = collection(db, "Societies", societyName, "wings", wing, "floors");
+                  const floorDocRef = doc(floorsCollectionRef, formattedFloor);
+                  const floorDocSnap = await getDoc(floorDocRef);
+  
+                  if (!floorDocSnap.exists()) {
+                    console.warn(`Floor ${floor} not found in wing ${wing}.`);
                     continue;
                   }
   
-                  const floorData = wingData.floorData;
-                  for (const [floor, flats] of Object.entries(floorData)) {
-                    for (const [flatNumber, flatDetails] of Object.entries(flats)) {
-                      // Check if the current flat is in the selected members
-                      const flatKey = `${wing} ${flatNumber}`;
-                      
-                      if (!selectedMembers.includes(flatKey)) {
-                        continue; // Skip flats not in the selected members list
-                      }
-                      const details = flatDetails as FlatDetails;
-                      residentType = details.resident;
+                  const flatsCollectionRef = collection(floorDocRef, "flats");
 
-                      // Mahesh Start
-
-                      // Call the function to get bill details
-                      const billItemLedger = await getBillItemsLedger(billNumber, details.resident );
-
-                      // Process each item: log details and update ledger
-                      for (const { updatedLedgerAccount, amount, ledgerAccount } of billItemLedger) {
-                        // Update ledger
-                        const ledgerUpdate1 = await updateLedger(updatedLedgerAccount, amount, "Add");
-                        const ledgerUpdate2 = await updateLedger(ledgerAccount, amount, "Add");
-                        console.log(`  Ledger Update Status: ${ledgerUpdate1}`);
-                        console.log(`  Ledger Update Status: ${ledgerUpdate2}`);
-                }
-
-                      // Mahesh End
-                      
+                  const flatDocRef = doc(flatsCollectionRef, flat);
+                  const flatDocSnap = await getDoc(flatDocRef);
   
-                      
-                      if (residentType === "owner") {
-                        amount = parsedItems.reduce(
-                          (sum, item) => sum + (item.ownerAmount || 0),
-                          0
-                        );
-                      } else if (residentType === "Tenant") {
-                        amount = parsedItems.reduce(
-                          (sum, item) => sum + (item.rentAmount || 0),
-                          0
-                        );
-                      } else if (residentType === "Closed") {
-                        amount = parsedItems.reduce(
-                          (sum, item) => sum + (item.closedAmount || 0),
-                          0
-                        );
-                      }
-  
-                      const billEntry:any  = {
-                        status:"unpaid",
-                        amount,
-                        originalAmount: amount,
-                        dueDate: dueDate as string,
-                        billType: "Special Bill",                       
-                      };
-
-                     
-                      details.bills = {
-                        ...details.bills,
-                        [billNumber]: billEntry,
-                      };
-                    }
+                  if (!flatDocSnap.exists()) {
+                    console.warn(`Flat ${flat} not found on floor ${floor} in wing ${wing}.`);
+                    continue;
                   }
-                }
   
-                // Push each update as a promise
-                for (const wing of selectedWings) {
-                  updatePromises.push(
-                    updateDoc(societiesDocRef, { [`wings.${wing}`]: societyWings[wing] })
-                  );
+                  const flatDetails = flatDocSnap.data();
+                  const residentType = flatDetails.resident;
+  
+                  // Calculate amount based on resident type
+                  let amount = 0;
+                  if (residentType === "owner") {
+                    amount = parsedItems.reduce((sum, item) => sum + (item.ownerAmount || 0), 0);
+                  } else if (residentType === "Tenant") {
+                    amount = parsedItems.reduce((sum, item) => sum + (item.rentAmount || 0), 0);
+                  } else if (residentType === "Closed") {
+                    amount = parsedItems.reduce((sum, item) => sum + (item.closedAmount || 0), 0);
+                  }
+  
+                  const billEntry: any = {
+                    status: "unpaid",
+                    amount,
+                    originalAmount: amount,
+                    dueDate: dueDate as string,
+                    billType: "Special Bill",
+                  };
+  
+                  // Add the bill entry to the flat's bills collection
+                  const billsCollectionRef = collection(flatDocRef, "bills");
+                  const billDocRef = doc(billsCollectionRef, billNumber);
+                  updatePromises.push(setDoc(billDocRef, billEntry));
                 }
   
                 // Wait for all updates to complete
                 await Promise.all(updatePromises);
-                
-
-                // Completely empty AsyncStorage entry
+  
+                // Clear AsyncStorage
                 await AsyncStorage.removeItem("@createdBillItem");
   
                 Alert.alert(
@@ -236,11 +207,7 @@ const NextScreenSpecial = () => {
                   ]
                 );
               } else {
-                console.error("Society document does not exist.");
-                Alert.alert(
-                  "Error",
-                  "Failed to update wings data. Society not found."
-                );
+                console.warn("No wings found in the wings collection.");
               }
             } catch (error) {
               console.error("Error generating bill:", error);
@@ -253,8 +220,15 @@ const NextScreenSpecial = () => {
     );
   };
   
+  
 
   return (
+    <>
+      {/* Top Appbar */}
+    <AppbarComponent
+        title= {name as string}
+        source="Admin"
+      />
     <ScrollView style={styles.container}>
       <View>
         <Text style={styles.header}>General Details</Text>
@@ -264,7 +238,8 @@ const NextScreenSpecial = () => {
         <Text>
           Duration: {startDate} - {endDate}
         </Text>
-        <Text>Due Date: {dueDate}</Text>
+        <Text>Due Date: {dueDate}</Text> 
+        <Text>Invoice Date: {invoiceDate}</Text> 
         <Text>members: {members}</Text>
       </View>
 
@@ -277,6 +252,7 @@ const NextScreenSpecial = () => {
             <Text>Rent Amount: {item.rentAmount}</Text>
             <Text>Closed Amount: {item.closedAmount}</Text>
             <Text>Ledger Account: {item.ledgerAccount}</Text>
+            <Text>Ledger Group: {item.groupFrom}</Text>
             <Text>Ledger Account updated: {item.updatedLedgerAccount}</Text>
           </View>
         ))}
@@ -286,6 +262,7 @@ const NextScreenSpecial = () => {
         <Button title="Generate Bill" onPress={handleGenerateBill} />
       </View>
     </ScrollView>
+    </>
   );
 };
 

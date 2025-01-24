@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ScrollView, Alert } from "react-native";
-import { Text, Card, Button, Divider, TextInput, Chip } from "react-native-paper";
+import { Text, Card, Button, Divider, TextInput, Chip, Appbar } from "react-native-paper";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
+import { useRouter, Stack } from "expo-router";
 
 interface Transaction {
   paidFrom: string;
@@ -17,6 +18,7 @@ interface AccountData {
 }
 
 const IncomeAndExpenditureScreen: React.FC = () => {
+  const router = useRouter();
   const [startDate, setStartDate] = useState("2024-11-01");
   const [endDate, setEndDate] = useState("2024-11-27");
   const [IncomeOptions, setIncomeOptions] = useState<string[]>([]);
@@ -88,6 +90,10 @@ const IncomeAndExpenditureScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    console.log('IncomeOptions',IncomeOptions)
+  }, [IncomeOptions]);
+
+  useEffect(() => {
     // Calculate Income Totals
     if (IncomeOptions.length > 0 && transactions.length > 0) {
       const accountBalances: Record<string, number> = {};
@@ -147,11 +153,22 @@ const IncomeAndExpenditureScreen: React.FC = () => {
 
   const totalIncome = incomeData.reduce((sum, item) => sum + item.amount, 0);
   const totalExpenses = expenseData.reduce((sum, item) => sum + item.amount, 0);
-
+ 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+
+      {/* Appbar Header */}
+      <Appbar.Header style={styles.header}>
+        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+        <Appbar.Content title="Income And Expenditure" titleStyle={styles.titleStyle} />
+        
+        <Appbar.Action icon="dots-vertical" onPress={() => {}} color="#fff" />
+      </Appbar.Header>
+
+    
+    <ScrollView style={styles.scrollcontainer}>
       {/* Header Section */}
-      <View style={styles.header}>
+      <View style={styles.scrollheader}>
         <Chip mode="outlined">FY: 2023-24</Chip>
         <Chip mode="outlined">FY: 2022-23</Chip>
         <Chip mode="outlined">FY: 2021-22</Chip>
@@ -225,15 +242,22 @@ const IncomeAndExpenditureScreen: React.FC = () => {
         <Text style={styles.totalAmount}>₹ {totalExpenses.toFixed(2)}</Text>
       </View>
     </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+  scrollcontainer: {
     padding: 10,
     backgroundColor: "#fff",
   },
-  header: {
+  scrollheader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",

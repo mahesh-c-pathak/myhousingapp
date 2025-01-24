@@ -5,12 +5,14 @@ import {
   FlatList,
   useWindowDimensions,
   Pressable,
+  ScrollView
 } from "react-native";
 import { Card, Text } from "react-native-paper";
 import { db } from "../../../FirebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useSociety } from "../../../utils/SocietyContext";
+import CustomButton from '../../../components/CustomButton';
 
 const Collection: React.FC = () => {
   const { societyName } = useSociety();
@@ -22,7 +24,9 @@ const Collection: React.FC = () => {
   const screenWidth = useWindowDimensions().width;
   const navigation = useNavigation();
   const { title } = useLocalSearchParams();
+  const [maxColumns, setMaxColumns] = useState(0); // State to store max columns
 
+  
   type StatusType =
     | "paid"
     | "unpaid"
@@ -46,6 +50,12 @@ const Collection: React.FC = () => {
           const data = docSnap.data();
           setSocietyData(data.wings);
           setSelectedWing(Object.keys(data.wings)[0]);
+           // Calculate the max number of columns
+           let maxFlats = 0;
+           Object.values(data.wings).forEach((wing: any) => {
+               maxFlats = wing.unitsPerFloor;
+           });
+           setMaxColumns(maxFlats); // Set max columns
         } else {
           alert("Society does not exist!");
         }
@@ -167,7 +177,7 @@ const Collection: React.FC = () => {
         <Card
           style={[
             styles.card,
-            { width: screenWidth / 3 - 10, backgroundColor: getStatusColor(flatStatus) },
+            { backgroundColor: getStatusColor(flatStatus) },
           ]}
           mode="elevated"
         >
@@ -194,7 +204,6 @@ const Collection: React.FC = () => {
   const renderFloor = ({ item }: { item: [string, Record<string, any>] }) => {
     const [floor, flats] = item;
     const flatNumbers = Object.keys(flats);
-
     return (
       <View>
         <Text style={styles.floorHeading}>{floor}</Text>
@@ -202,12 +211,16 @@ const Collection: React.FC = () => {
           data={flatNumbers}
           keyExtractor={(flatNumber) => `${floor}-${flatNumber}`}
           renderItem={({ item }) => renderFlat({ item, flats, floor })}
-          numColumns={3}
+        
           contentContainerStyle={styles.flatListContent}
+          scrollEnabled={false} // Disable FlatList's vertical scrolling
+          horizontal={true}
         />
       </View>
     );
   };
+
+  const handleSave = async () => {}
 
   if (loading) {
     return (
@@ -216,6 +229,8 @@ const Collection: React.FC = () => {
       </View>
     );
   }
+
+
 
   return (
     <View style={styles.container}>
@@ -258,6 +273,10 @@ const Collection: React.FC = () => {
       </View>
 
       {selectedWing && societyData[selectedWing]?.floorData ? (
+        <ScrollView horizontal 
+          contentContainerStyle={styles.scrollViewContainer}
+          style={styles.scrollView} // Added style for ScrollView
+        >
         <FlatList
           data={Object.entries(societyData[selectedWing].floorData).sort(
             ([floorA], [floorB]) => {
@@ -269,12 +288,20 @@ const Collection: React.FC = () => {
           keyExtractor={([floor]) => floor}
           renderItem={renderFloor}
           contentContainerStyle={styles.flatListContent}
+          scrollEnabled={false} // Disable FlatList's vertical scrolling
         />
+        </ScrollView>
+        
       ) : (
         <Text style={styles.info}>
           No floor data available for Wing {selectedWing}.
         </Text>
       )}
+      {/* Save Button */}
+    <CustomButton
+      onPress={handleSave}
+      title= {"Send Payment Reminder"}
+     />
     </View>
   );
 };
@@ -324,6 +351,7 @@ const styles = StyleSheet.create({
   },
   flatListContent: {
     paddingHorizontal: 8,
+    marginBottom: 16,
   },
   card: {
     margin: 4,
@@ -365,6 +393,23 @@ const styles = StyleSheet.create({
     color: "#FFFFFF", // White color for overdue text
     textAlign: "center",
     marginVertical: 4,
+  },
+  scrollViewContainer: {
+    margin: 16,
+    padding: 4,
+    elevation: 4, // For shadow on Android
+    shadowColor: "#000", // For shadow on iOS
+    shadowOffset: { width: 0, height: 2 }, // For shadow on iOS
+    shadowOpacity: 0.1, // For shadow on iOS
+    shadowRadius: 4, // For shadow on iOS
+    borderWidth: 1, // Optional for outline
+    borderColor: "#e0e0e0", // Optional for outline
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+  },
+  // Ensure the ScrollView doesn't take up excess space
+  scrollView: {
+    flexShrink: 1, // Ensures it shrinks to fit its content
   },
   
 });

@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
-import { TextInput, Button, } from 'react-native-paper'; // Ensure dropdown is installed or replaced with Picker
+import { TextInput, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, collection } from 'firebase/firestore';
 import { db } from "../../../FirebaseConfig";
 
 const RequestTrialScreen: React.FC = () => {
-  const [type, setType] = useState('');
-  const [name, setName] = useState('');
+  const [societyName, setSocietyName] = useState('');
   const [totalWings, setTotalWings] = useState('');
   const [state, setState] = useState('Maharashtra');
   const [city, setCity] = useState('Pune');
@@ -15,41 +14,39 @@ const RequestTrialScreen: React.FC = () => {
   const router = useRouter();
 
   const validateAndSubmit = async () => {
-    if (!name || !totalWings || !pincode) {
+    if (!societyName || !totalWings || !pincode) {
       Alert.alert('Validation Error', 'Please fill in all the fields.');
       return;
     }
 
     try {
-      const societyDocRef = doc(db, 'Societies', name);
-      const societyDoc = await getDoc(societyDocRef);
+      const societiesRef = collection(db, 'Societies');
+      const societyDocRef = doc(societiesRef, societyName);
 
-      if (societyDoc.exists()) {
-        Alert.alert(
-          'Duplicate Entry',
-          `A society with the name "${name}" already exists. Please choose a different name.`
-        );
-        return;
-      }
-
-      const societyData = {
-        type,
-        name,
+      // Create society-level document
+      await setDoc(societyDocRef, {
+        name: societyName,
         totalWings: Number(totalWings),
         state,
         city,
         pincode,
-      };
-
-      // Save to Firebase using `setDoc`
-      await setDoc(societyDocRef, societyData);
-      Alert.alert('Success', 'Society information saved successfully!');
-
-      // Navigate to next screen
-      router.push({
-        pathname: '/SetupWingsScreen',
-        params: { totalWings, name },
       });
+
+      // Initialize wing structure
+      for (let i = 1; i <= Number(totalWings); i++) {
+        const wingLetter = String.fromCharCode(64 + i); // Convert 1 -> A, 2 -> B, etc
+        const wingName = wingLetter; // "Wing A", "Wing B", etc.
+        const wingRef = doc(collection(societyDocRef, 'wings'), wingName);
+
+        await setDoc(wingRef, {
+          totalFloors: 0,
+          unitsPerFloor: 0,
+          format: '',
+        });
+      }
+
+      Alert.alert('Success', 'Society and wings initialized successfully!');
+      router.push({ pathname: '/SetupWingsScreen', params: { societyName, totalWings } });
     } catch (error) {
       Alert.alert('Error', 'Failed to save data. Please try again.');
       console.error('Firebase Error:', error);
@@ -59,51 +56,39 @@ const RequestTrialScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <TextInput
-       label="Type" 
-       mode="outlined"
-       style={styles.input}
-       placeholder="Buildings (Multiple Floors)" 
-       value={type}
-       onChangeText={setType}
-        
-       />
-      <TextInput
-        label="Name"
+        label="Society Name"
         mode="outlined"
         style={styles.input}
-        placeholder="Happy home"
-        value={name}
-        onChangeText={setName}
+        placeholder="Happy Home"
+        value={societyName}
+        onChangeText={setSocietyName}
       />
       <TextInput
-        label="Total Wings/Blocks/Building"
+        label="Total Wings/Blocks/Buildings"
         mode="outlined"
         style={styles.input}
         value={totalWings}
         onChangeText={setTotalWings}
         keyboardType="numeric"
       />
-      <TextInput 
-        label="State" 
+      <TextInput
+        label="State"
         mode="outlined"
         style={styles.input}
-        placeholder="Enter State" 
         value={state}
         onChangeText={setState}
       />
-      <TextInput 
-        label="City" 
+      <TextInput
+        label="City"
         mode="outlined"
         style={styles.input}
-        placeholder="Enter City"
         value={city}
-        onChangeText={setCity}   
-        />
+        onChangeText={setCity}
+      />
       <TextInput
         label="Pincode"
         mode="outlined"
         style={styles.input}
-        placeholder="Enter Pincode"
         value={pincode}
         onChangeText={setPincode}
       />

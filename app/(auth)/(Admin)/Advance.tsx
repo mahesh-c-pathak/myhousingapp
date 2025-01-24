@@ -9,6 +9,7 @@ import { db } from "../../../FirebaseConfig";
 import PaymentDatePicker from "../../../utils/paymentDate";
 import { generateVoucherNumber } from "../../../utils/generateVoucherNumber";
 import { updateLedger } from "../../../utils/updateLedger";
+import paymentModeOptions from "../../../constants/paymentModeOptions";
 
 const Advance = () => {
   const router = useRouter();
@@ -27,6 +28,26 @@ const Advance = () => {
 
   const [isDeposit, setIsDeposit] = useState(false);
 
+  
+
+  const [paymentMode, setpaymentMode] = useState<string>("");
+  const [showPaymentMode, setShowPaymentMode] = useState<boolean>(false);
+  const [bankAccountOptions, setBankAccountOptions] = useState<string[]>([]);
+  
+  // Format date as YYYY-MM-DD
+  const formatDate = (date: Date) => {
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${year}-${month}-${day}`;
+  };
+
+  const [formattedDate, setFormattedDate] = useState(formatDate(paymentDate));
+
+  useEffect(() => {
+    setFormattedDate(formatDate(paymentDate))
+  }, [paymentDate]);
+
   useEffect(() => {
     const fetchAccountOptions = async () => {
       try {
@@ -41,7 +62,16 @@ const Advance = () => {
           .filter((account) => account.trim() !== "")
           .map((account) => ({ label: account, value: account }));
 
+        const bankAccountsSnapshot = await getDocs(
+            query(ledgerGroupsRef, where("name", "in", ["Bank Accounts"]))
+          );
+
+        const bankAccounts = bankAccountsSnapshot.docs
+        .map((doc) => doc.data().accounts || [])
+        .flat();
+
         setAccountFromOptions(fromAccounts);
+        setBankAccountOptions(bankAccounts);
       } catch (error) {
         console.error("Error fetching account options:", error);
         Alert.alert("Error", "Failed to fetch account options.");
@@ -50,6 +80,16 @@ const Advance = () => {
 
     fetchAccountOptions();
   }, []);
+
+  useEffect(() => {
+    if (bankAccountOptions.includes(ledgerAccount)) {
+      setShowPaymentMode(true);
+    } else {
+      setShowPaymentMode(false);
+      setpaymentMode("Cash");
+    }
+
+  }, [bankAccountOptions, ledgerAccount]);
 
   const handleSave = async () => {
     try {
@@ -86,6 +126,9 @@ const Advance = () => {
             note,
             voucherNumber,
             isDeposit,
+            paymentMode,
+            formattedDate,
+            type: "Advance",
           };
   
           // Update the Advance array
@@ -189,6 +232,19 @@ const Advance = () => {
             placeholder="Select Account"
           />
         </View>
+
+            {/* Payment Mode */}
+          {showPaymentMode && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Payment Mode</Text>
+              <Dropdown
+                data={paymentModeOptions}
+                onChange={setpaymentMode}
+                placeholder="Select Account"
+              />
+            </View>
+        )}
+
             {/* Payment Date */}
         <View style={styles.section}>
           <Text style={styles.label}>Payment Date</Text>

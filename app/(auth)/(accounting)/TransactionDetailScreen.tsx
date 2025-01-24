@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Alert, StyleSheet, View } from "react-native";
-import { Appbar, Menu, Text, Button, Divider } from "react-native-paper";
+import { Appbar, Menu, Text, Button, Divider, ActivityIndicator } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { doc, deleteDoc } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
@@ -10,9 +10,10 @@ import { useSociety } from "../../../utils/SocietyContext";
 
 const TransactionDetailScreen = () => {
   const router = useRouter();
-  const { id, type, voucher, transactionDate, paidFrom, paidTo, amount, narration } = useLocalSearchParams();
+  const { id, type, voucher, transactionDate, paidFrom, paidTo, amount, narration, groupFrom, groupTo } = useLocalSearchParams();
   const { assetAccounts, liabilityAccounts, incomeAccounts, expenditureAccounts,} = useSociety();
   const [menuVisible, setMenuVisible] = React.useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Handle deleting the transaction
   const handleDelete = async () => {
@@ -25,6 +26,7 @@ const TransactionDetailScreen = () => {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            setLoading(true);
             try {
               if (typeof id === "string") {
                 await deleteDoc(doc(db, "Transaction", id));
@@ -33,22 +35,26 @@ const TransactionDetailScreen = () => {
                   // Update ledger                            
                   // Revert original ledger updates
                   await updateLedger(
+                    groupTo as string,
                     paidTo as string,
                     parseFloat(amount as string),
-                    liabilityAccounts.includes(paidTo as string) ? "Add" : "Subtract"
+                    liabilityAccounts.includes(paidTo as string) ? "Add" : "Subtract",
+                    transactionDate as string
                   );
                   await updateLedger(
+                    groupFrom as string,
                     paidFrom as string,
                     parseFloat(amount as string),
-                    liabilityAccounts.includes(paidFrom as string) ? "Subtract" : "Add"
+                    liabilityAccounts.includes(paidFrom as string) ? "Subtract" : "Add",
+                    transactionDate as string
                   );
                }
  
                 if (type == "Income") {
                   // Update ledger                            
                  const updatePromises = [];        
-                 const LedgerUpdate1 = await updateLedger(paidFrom as string, parseFloat(amount as string), "Subtract" ); // Update Ledger
-                 const LedgerUpdate2 = await updateLedger( paidTo as string, parseFloat(amount as string), "Subtract" ); // Update Ledger       
+                 const LedgerUpdate1 = await updateLedger( groupFrom as string, paidFrom as string, parseFloat(amount as string), "Subtract",transactionDate as string ); // Update Ledger
+                 const LedgerUpdate2 = await updateLedger( groupTo as string, paidTo as string, parseFloat(amount as string), "Subtract", transactionDate as string ); // Update Ledger       
                  updatePromises.push(
                    LedgerUpdate1, LedgerUpdate2
                  );
@@ -56,11 +62,11 @@ const TransactionDetailScreen = () => {
                  await Promise.all(updatePromises);
                }
 
-           if (type == "Cash-Withdrawal"|| type == "Cash-Deposit" || type == "Journal") {
+           if (type == "Cash-Withdrawal"|| type == "Cash-Deposit" || type == "Journal" || "Cash-To-Cash-Transfer" || "Bank-To-Bank-Transfer") {
             // Update ledger                            
            const updatePromises = [];        
-           const LedgerUpdate1 = await updateLedger(paidFrom as string, parseFloat(amount as string), "Add" ); // Update Ledger
-           const LedgerUpdate2 = await updateLedger( paidTo as string, parseFloat(amount as string), "Subtract" ); // Update Ledger       
+           const LedgerUpdate1 = await updateLedger(groupFrom as string, paidFrom as string, parseFloat(amount as string), "Add" , transactionDate as string); // Update Ledger
+           const LedgerUpdate2 = await updateLedger( groupTo as string, paidTo as string, parseFloat(amount as string), "Subtract", transactionDate as string ); // Update Ledger       
            updatePromises.push(
              LedgerUpdate1, LedgerUpdate2
            );
@@ -68,7 +74,7 @@ const TransactionDetailScreen = () => {
            await Promise.all(updatePromises);
          }
 
-               
+                
 
                 Alert.alert("Deleted", "The transaction has been deleted.");
                 router.replace("/TransactionScreen"); // Go back to the transactions list
@@ -79,12 +85,22 @@ const TransactionDetailScreen = () => {
             } catch (error) {
               console.error("Error deleting transaction:", error);
               Alert.alert("Error", "Could not delete the transaction.");
+            } finally {
+              setLoading(false);
             }
           },
         },
       ]
     );
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -166,6 +182,7 @@ const TransactionDetailScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
+  loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center",},
   content: { padding: 16 },
   detailItem: { marginVertical: 8, fontSize: 16 },
   label: { fontWeight: "bold" },

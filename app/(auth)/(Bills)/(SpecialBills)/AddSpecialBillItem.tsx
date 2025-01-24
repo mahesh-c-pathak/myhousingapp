@@ -5,6 +5,11 @@ import { collection, doc, getDoc, getDocs, query, where, addDoc, updateDoc } fro
 import { db } from "../../../../FirebaseConfig";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import AppbarComponent from '../../../../components/AppbarComponent';
+
+import { billItemLedgerGroupList } from '../../../../components/LedgerGroupList'; // Import the array
+import { fetchAccountList } from "../../../../utils/acountFetcher";
+import Dropdown from "../../../../utils/DropDown";
 
 const AddSpecialBillItem = () => {
   const [itemName, setItemName] = useState("");
@@ -19,9 +24,10 @@ const AddSpecialBillItem = () => {
   const params = useLocalSearchParams();
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
-  const [accountFromOptions, setAccountFromOptions] = useState<string[]>([]);
+  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
   const [menuFromVisible, setMenuFromVisible] = useState<boolean>(false);
   const [ledgerAccount, setLedgerAccount] = useState<string>("");
+  const [groupFrom, setGroupFrom] = useState<string>("");
 
   // Prefill form in update mode
   useEffect(() => {
@@ -68,7 +74,7 @@ const AddSpecialBillItem = () => {
                     "Sundry Creditors",
                     "Suspense Account",
                 ]))
-            );
+            ); 
             const fromAccounts = fromQuerySnapshot.docs
               .map((doc) => doc.data().accounts || [])
               .flat()
@@ -86,6 +92,19 @@ const AddSpecialBillItem = () => {
     fetchAccountOptions();
   }, [params?.id]);
 
+  // fetch Paid To List
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const { accountOptions } = await fetchAccountList(billItemLedgerGroupList);
+        setAccountFromOptions(accountOptions);
+      } catch (error) {
+        Alert.alert("Error", "Failed to fetch account options.");
+      }
+    };
+    fetchOptions();
+  }, [billItemLedgerGroupList, params?.id]);
+
   const openMenu = () => setMenuVisible(true);
   const closeMenu = () => setMenuVisible(false);
 
@@ -99,7 +118,8 @@ const AddSpecialBillItem = () => {
       rentAmount: parseFloat(rentAmount) || 0,
       closedUnitAmount: parseFloat(closedUnitAmount) || 0,
       updatedAt: new Date().toISOString(),
-      ledgerAccount: ledgerAccount || "",
+      ledgerAccount: ledgerAccount,
+      groupFrom: groupFrom,
       updatedLedgerAccount, // Add updatedLedgerAccount here
     };
 
@@ -157,7 +177,12 @@ const AddSpecialBillItem = () => {
 
   return (
     <Provider>
-      <ScrollView style={styles.container}>
+      <View style={styles.container}>
+        {/* Top Appbar */}
+    <AppbarComponent
+        title= {isEditMode ? "Update Bill Item" : "Add Bill Item"} 
+        source="Admin"
+      />
         <KeyboardAvoidingView
           style={styles.form}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -178,32 +203,31 @@ const AddSpecialBillItem = () => {
             multiline
           />
           {isEditMode && (
-            <Menu
-            visible={menuFromVisible}
-            onDismiss={() => setMenuFromVisible(false)}
-            anchor={
-              <TextInput
-                label="Add ledger Account"
-                value={ledgerAccount}
-                right={<TextInput.Icon icon="chevron-down" onPress={() => {setMenuFromVisible(true)}} />}
-                editable={false}
-                mode="outlined"
-                style={styles.input}
-              />
-            }
-          >
-            {accountFromOptions.map((option, index) => (
-              <Menu.Item
-                key={index}
-                onPress={() => {
-                  setLedgerAccount(option);
-                  setMenuFromVisible(false);
-                }}
-                title={option}
-              />
-            ))}
-          </Menu>
-            
+              <View style={styles.section}>
+                <Text style={styles.label}>Paid From</Text>
+                <Dropdown
+                  data={accountFromOptions.map((option) => ({
+                    label: option.label,
+                    value: option.value,
+                  }))}
+                  onChange={(selectedValue) => {
+                    setLedgerAccount(selectedValue);
+
+                    // Find the selected account to get its group
+                    const selectedOption = accountFromOptions.find(
+                      (option) => option.value === selectedValue
+                    );
+                    if (selectedOption) {
+                      setGroupFrom(selectedOption.group); // Set the group name
+                      console.log("Selected Group:", selectedOption.group);
+                    }
+                    
+                  }}
+                  placeholder="Select Account"
+                  initialValue={ledgerAccount}
+                />
+
+              </View>           
             )}
           <Menu
             visible={menuVisible}
@@ -257,16 +281,13 @@ const AddSpecialBillItem = () => {
             {isEditMode ? "Update" : "Save"}
           </Button>
         </KeyboardAvoidingView>
-      </ScrollView>
+      </View>
     </Provider>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
+  container: { flex: 1, backgroundColor: "#FFFFFF",},
   form: {
     flex: 1,
     padding: 20,
@@ -280,6 +301,8 @@ const styles = StyleSheet.create({
   saveButton: {
     marginTop: 20,
   },
+  label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
+  section: { marginBottom: 10 },
 });
 
 export default AddSpecialBillItem;

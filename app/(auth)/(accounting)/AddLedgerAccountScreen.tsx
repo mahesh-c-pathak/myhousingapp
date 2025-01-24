@@ -1,47 +1,54 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Alert, Platform } from "react-native";
-import { TextInput, Button } from "react-native-paper";
+import { View, StyleSheet, Alert, Platform, Text } from "react-native";
+import { TextInput, Button, Appbar } from "react-native-paper";
 import { useRouter } from "expo-router";
 import { db } from "../../../FirebaseConfig";
-import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-  arrayUnion,
-  addDoc,
-} from "firebase/firestore";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { Picker } from "@react-native-picker/picker";
+import { collection, getDocs, doc, updateDoc, arrayUnion, addDoc, setDoc} from "firebase/firestore";
+import CustomInput from '../../../components/CustomInput';
+import CustomButton from '../../../components/CustomButton';
+import {ledgerGroupsList} from '../../../components/LedgerGroupList'; // Import the array
+import Dropdown from "../../../utils/DropDown";
+import PaymentDatePicker from "../../../utils/paymentDate";
 
 const AddLedgerAccountScreen: React.FC = () => {
   const [name, setName] = useState<string>("");
   const [group, setGroup] = useState<string>("");
   const [ledgerGroups, setLedgerGroups] = useState<
-    { id: string; name: string }[]
+    { label: string; value: string }[]
   >([]);
   const [openingBalance, setOpeningBalance] = useState<string>("0.00");
   const [asOnDate, setAsOnDate] = useState<Date>(new Date());
-  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [note, setNote] = useState<string>("");
 
+  const [error, setError] = useState('');
+
   const router = useRouter();
+
+  // Function to format date as "YYYY-MM-DD"
+  const formatDate = (date: Date) => {
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${year}-${month}-${day}`;
+  };
+
+  const [formattedDate, setFormattedDate] = useState(formatDate(new Date()));
 
   // Fetch ledger groups from Firestore
   useEffect(() => {
     const fetchLedgerGroups = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "ledgerGroups"));
+        const querySnapshot = await getDocs(collection(db, "ledgerGroupsFinal"));
         const groups = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
+          label: doc.id,
+          value: doc.data().name,
         }));
         setLedgerGroups(groups);
       } catch (error) {
         console.error("Error fetching ledger groups:", error);
         Alert.alert("Error", "Failed to fetch ledger groups.");
       }
-    };
+    }; 
 
     fetchLedgerGroups();
   }, []);
@@ -53,7 +60,7 @@ const AddLedgerAccountScreen: React.FC = () => {
         return;
       }
   
-      const selectedGroup = ledgerGroups.find((g) => g.name === group);
+      const selectedGroup = ledgerGroups.find((g) => g.value === group);
       if (!selectedGroup) {
         Alert.alert("Error", "Invalid group selection.");
         return;
@@ -74,46 +81,72 @@ const AddLedgerAccountScreen: React.FC = () => {
       ];
   
       // Add to the selected group
-      const selectedGroupDocRef = doc(db, "ledgerGroups", selectedGroup.id);
-      await updateDoc(selectedGroupDocRef, {
-        accounts: arrayUnion(name),
-      });
-  
+      // Reference for the selected group
+        const selectedGroupDocRef = doc(db, "ledgerGroupsFinal", selectedGroup.label);
+
+      // Set the account document with the `name` as the document ID
+        const accountDocRef = doc(collection(selectedGroupDocRef, "accounts"), name);
+        await setDoc(accountDocRef, { name });
+
+       // Set the balance document with the `asOnDate` (formatted date) as the document ID
+        const balanceDocRef = doc(
+          collection(accountDocRef, "balances"),
+          formatDate(asOnDate)
+        );
+        await setDoc(balanceDocRef, {
+          date: formatDate(asOnDate),
+          dailyChange: parseFloat(openingBalance),
+          cumulativeBalance: parseFloat(openingBalance),
+        });
+      
       // Add to "Account Receivable" group if in specialGroups
-      if (specialGroups.includes(group)) {
-        const accountReceivableGroup = ledgerGroups.find(
-          (g) => g.name === "Account Receivable"
+    if (specialGroups.includes(group)) {
+      const accountReceivableGroup = ledgerGroups.find(
+        (g) => g.label === "Account Receivable"
+      );
+      if (accountReceivableGroup) {
+        const accountReceivableDocRef = doc(
+          db,
+          "ledgerGroupsFinal",
+          accountReceivableGroup.label
         );
-        if (accountReceivableGroup) {
-          const accountReceivableDocRef = doc(
-            db,
-            "ledgerGroups",
-            accountReceivableGroup.id
-          );
-          await updateDoc(accountReceivableDocRef, {
-            accounts: arrayUnion(`${name} Receivable`),
-          }
+
+        // Add the account to "Account Receivable" group's accounts subcollection
+        const receivableAccountDocRef = doc(
+          collection(accountReceivableDocRef, "accounts"),
+          `${name} Receivable`
         );
-        
-        } else {
-          Alert.alert(
-            "Error",
-            "'Account Receivable' group not found in ledger groups."
-          );
-          return;
-        }
+        await setDoc(receivableAccountDocRef, { name: `${name} Receivable` });
+
+        // Add a balances subcollection with an initial balance of 0.00
+        const receivableBalanceDocRef = doc(
+          collection(receivableAccountDocRef, "balances"),
+          formatDate(asOnDate)
+        );
+        await setDoc(receivableBalanceDocRef, {
+          date: formatDate(asOnDate),
+          dailyChange: parseFloat(openingBalance),
+          cumulativeBalance: parseFloat(openingBalance),
+        });
+      } else {
+        Alert.alert(
+          "Error",
+          "'Account Receivable' group not found in ledger groups."
+        );
+        return;
       }
+    }
   
-      // Save payment details
-      await addDoc(collection(db, "payments"), {
-        name,
-        group,
-        openingBalance: parseFloat(openingBalance),
-        asOnDate: asOnDate.toISOString().split("T")[0],
-        note,
-      });
-  
-      Alert.alert("Success", "Ledger account added successfully!");
+      Alert.alert(
+        "Success",
+        "Ledger account added successfully!",
+        [
+          {
+            text: "OK",
+            onPress: () => router.replace("/LedgerAccountsScreen"),
+          },
+        ]
+      );
       router.back();
     } catch (error) {
       console.error("Error saving ledger account:", error);
@@ -121,68 +154,71 @@ const AddLedgerAccountScreen: React.FC = () => {
     }
   };
   
-
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === "android") setShowDatePicker(false);
-    if (selectedDate) setAsOnDate(selectedDate);
-  };
-
   return (
     <View style={styles.container}>
-      <TextInput
-        label="Name"
-        value={name}
-        onChangeText={setName}
-        style={styles.input}
-      />
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={group}
-          onValueChange={(itemValue) => setGroup(itemValue)}
-          style={styles.picker}
-        >
-          <Picker.Item label="Select Ledger Group" value="" />
-          {ledgerGroups.map((group) => (
-            <Picker.Item key={group.id} label={group.name} value={group.name} />
-          ))}
-        </Picker>
-      </View>
-      <TextInput
-        label="Opening Balance"
-        value={openingBalance}
-        keyboardType="numeric"
-        onChangeText={setOpeningBalance}
-        style={styles.input}
-      />
-      <TextInput
-        label="As on Date"
-        value={asOnDate.toISOString().split("T")[0]}
-        style={styles.input}
-        editable={false}
-        right={
-          <TextInput.Icon
-            icon="calendar"
-            onPress={() => setShowDatePicker(true)}
-          />
-        }
-      />
-      {showDatePicker && (
-        <DateTimePicker
-          value={asOnDate}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={handleDateChange}
+      {/* Top Appbar */}
+      <Appbar.Header style={styles.header}>
+        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+        <Appbar.Content title="Ledger Accounts" titleStyle={styles.titleStyle} />
+      </Appbar.Header> 
+      <View style={styles.bodycontainer}>
+      {/* Name */}
+      <View style={{ width: '100%' }}>
+        <CustomInput
+          label="Name"
+          value={name}
+          placeholder="Enter your name"
+          onChangeText={setName}
+          keyboardType="email-address"
+          error={error && !name ? 'Name is required' : ''}
         />
-      )}
-      <TextInput
-        label="Note (optional)"
-        value={note}
-        onChangeText={setNote}
-        style={styles.input}
-      />
-      <Button mode="contained" onPress={handleSave} style={styles.button}>
-        Save
-      </Button>
+      </View>
+
+        {/* Ledger Group */}
+        <View style={styles.section}>
+          <Text style={styles.label}> Ledger Group </Text>
+          <Dropdown
+            data={ledgerGroups}
+            onChange={setGroup}
+            placeholder="Select Group"
+            initialValue={group}
+          />
+        </View>
+
+
+       {/* Opening Balance */}
+       <View style={{ width: '100%' }}>
+        <CustomInput
+          label="Opening Balance"
+          value={openingBalance}
+          placeholder="0,00"
+          onChangeText={setOpeningBalance}
+          keyboardType="numeric"
+        />
+        </View>
+
+        {/* As on Date */}
+        <View style={styles.section}>
+          <Text style={styles.label}>As on Date</Text>
+          <PaymentDatePicker
+            initialDate={asOnDate}
+            onDateChange={setAsOnDate}
+          />
+        </View>
+
+        {/* Note */}
+        <View style={{ width: '100%' }}>
+          <CustomInput
+            label="Note (optional)"
+            value={note}
+            onChangeText={setNote}
+            multiline = {true}
+          />
+        </View>
+
+        {/* Save Button */}
+      <CustomButton onPress={handleSave} />
+      </View>
     </View>
   );
 };
@@ -190,29 +226,16 @@ const AddLedgerAccountScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  bodycontainer: {
+    flex: 1,
     padding: 16,
-    backgroundColor: "#f5f5f5",
   },
-  input: {
-    marginBottom: 16,
-  },
-  pickerContainer: {
-    marginBottom: 16,
-    borderWidth: 1,
-    borderRadius: 4,
-    borderColor: "#BDBDBD",
-    justifyContent: "center",
-    backgroundColor: "#f5f5f5",
-  },
-  picker: {
-    height: 56,
-    color: "#000",
-    marginLeft: 8,
-  },
-  button: {
-    marginTop: 16,
-    backgroundColor: "#6200ee",
-  },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+  section: { marginBottom: 10 },
+  label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
 });
 
 export default AddLedgerAccountScreen;

@@ -1,123 +1,77 @@
-import React, { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
-import { Text, Card, Title, Paragraph } from 'react-native-paper';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../../../FirebaseConfig';
-import { useSession } from '../../../utils/ctx';
+import { StatusBar } from 'expo-status-bar';
+import { StyleSheet, Button, View } from 'react-native';
+import * as XLSX from 'xlsx';
+import * as FileSystem from 'expo-file-system';
+import { StorageAccessFramework } from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Define the structure of the payment history
-interface PaymentHistoryItem {
-  id: string;
-  month: string;
-  amount: number;
-  status: string;
-  paidAt: string | null;
-}
+const DIRECTORY_URI_KEY = 'directoryUri';
 
-const ResidentPaymentHistory: React.FC = () => {
-  const { user } = useSession();
-  const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+export default function App() {
+  const generateExcel = async () => {
+    try {
+      const data = [
+        { Name: 'John Doe', Age: 30, City: 'New York' },
+        { Name: 'Jane Smith', Age: 25, City: 'Los Angeles' },
+      ];
 
-  useEffect(() => {
-    const fetchPaymentHistory = async () => {
-      const paymentHistoryRef = collection(db, 'maintenance_requests');
-      
-      // Listen for real-time changes
-      const unsubscribe = onSnapshot(paymentHistoryRef, (snapshot) => {
-        const historyData: PaymentHistoryItem[] = [];
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      const base64 = XLSX.write(wb, { type: 'base64' });
+      const tempFilename = `${FileSystem.documentDirectory}MyExcel.xlsx`;
 
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const userPayment = data.payments[user.uid];
-
-          if (userPayment) {
-            historyData.push({
-              id: doc.id,
-              month: data.month,
-              amount: data.amount,
-              status: userPayment.status,
-              paidAt: userPayment.paidAt,
-            });
-          }
-          
-        });
-
-        setPaymentHistory(historyData);
-        setLoading(false);
+      await FileSystem.writeAsStringAsync(tempFilename, base64, {
+        encoding: FileSystem.EncodingType.Base64,
       });
 
-      // Cleanup the listener when the component unmounts
-      return () => unsubscribe();
-    };
+      let savedDirectoryUri = await AsyncStorage.getItem(DIRECTORY_URI_KEY);
 
-    fetchPaymentHistory();
-  }, []); // Re-run the effect whenever the user changes (e.g., on login)
+      if (!savedDirectoryUri) {
+        const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permissions.granted) {
+          console.log('Permission not granted.');
+          return;
+        }
+
+        savedDirectoryUri = permissions.directoryUri;
+        await AsyncStorage.setItem(DIRECTORY_URI_KEY, savedDirectoryUri);
+      }
+
+      const filename = 'MyExcel.xlsx';
+      const uri = await StorageAccessFramework.createFileAsync(
+        savedDirectoryUri,
+        filename,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+
+      await FileSystem.writeAsStringAsync(uri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      console.log('File saved to:', uri);
+      // Remove the temporary file from the documentDirectory after saving
+      await FileSystem.deleteAsync(tempFilename, { idempotent: true });
+      console.log('Temporary file removed from documentDirectory');
+      
+    } catch (error) {
+      console.error('Error while saving the Excel file:', error);
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Your Payment History</Text>
-      {loading ? (
-        <ActivityIndicator animating={true} size="large" />
-      ) : (
-        <FlatList
-          data={paymentHistory}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <Card style={styles.card}>
-              <Card.Content>
-                <Title style={styles.cardTitle}>{item.month}</Title>
-                <Paragraph style={styles.cardParagraph}>Amount: ${item.amount}</Paragraph>
-                <Paragraph style={styles.cardParagraph}>Status: {item.status}</Paragraph>
-                <Paragraph style={styles.cardParagraph}>
-                  Paid At: {item.paidAt ? new Date(item.paidAt).toLocaleDateString() : 'N/A'}
-                </Paragraph>
-              </Card.Content>
-            </Card>
-          )}
-          ListEmptyComponent={<Text style={styles.emptyText}>No payment history available</Text>}
-        />
-      )}
+      <Button title="Generate Excel" onPress={generateExcel} />
+      <StatusBar style="auto" />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#f6f6f6',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
-    color: '#6200ea', // Bright color for title
-  },
-  card: {
-    marginVertical: 8,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: 'white',
-    elevation: 3, // Slight shadow to lift the card
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000000', // Dark text for contrast
-  },
-  cardParagraph: {
-    fontSize: 16,
-    marginVertical: 4,
-    color: '#333333', // Dark text color for readability
-  },
-  emptyText: {
-    textAlign: 'center',
-    fontSize: 16,
-    color: '#999',
-    marginTop: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
-
-export default ResidentPaymentHistory;

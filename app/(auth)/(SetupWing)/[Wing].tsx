@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, FlatList, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { TextInput, Button } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { db } from "../../../FirebaseConfig";
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, getDocs,deleteDoc  } from 'firebase/firestore';
 
 const WingScreen: React.FC = () => {
-  const { Wing, name } = useLocalSearchParams(); // Retrieves wing name from the route params
+  const { Wing, societyName } = useLocalSearchParams(); // Retrieves wing name from the route params
+  const sanitizedWing = (Wing as string).trim(); // Sanitize the wing name
+  const wingLetter = sanitizedWing.split('-').pop(); // Extracts the wing identifier (e.g., 'A' from 'Wing-A')
+
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
   const [totalFloors, setTotalFloors] = useState<string>('');
   const [unitsPerFloor, setUnitsPerFloor] = useState<string>('');
@@ -30,102 +34,149 @@ const WingScreen: React.FC = () => {
     }
   
     const formatType = numberFormats[selectedFormat].type;
-    const result: Record<string, Record<string, any>> = {};
-  
-    const generateFlatObject = (flatNumber: string) => ({
-      resident: 'owner', // Default resident value
-      flatType: 'owner',
-      bills: {
-        bill1: { status: 'unpaid', amount: 0 },
-        bill2: { status: 'unpaid', amount: 0 },
-      }, // Default bill objects as key-value pairs
-    });
+    const result: Record<string, string[]> = {}; // Store floor -> flat numbers mapping
   
     if (formatType === 'floorUnit') {
       for (let floor = 1; floor <= floors; floor++) {
-        result[`Floor ${floor}`] = {};
+        result[`Floor ${floor}`] = [];
         for (let unit = 1; unit <= units; unit++) {
-          const flatNumber = `${floor}0${unit}`;
-          result[`Floor ${floor}`][flatNumber] = generateFlatObject(flatNumber);
+          result[`Floor ${floor}`].push(`${floor}0${unit}`);
         }
       }
     } else if (formatType === 'sequential') {
       let counter = 1;
       for (let floor = 1; floor <= floors; floor++) {
-        result[`Floor ${floor}`] = {};
+        result[`Floor ${floor}`] = [];
         for (let unit = 1; unit <= units; unit++) {
-          const flatNumber = counter.toString();
-          result[`Floor ${floor}`][flatNumber] = generateFlatObject(flatNumber);
+          result[`Floor ${floor}`].push(counter.toString());
           counter++;
         }
       }
     } else if (formatType === 'groundUnit') {
       for (let floor = 0; floor < floors; floor++) {
         const floorKey = `Floor ${floor === 0 ? 'G' : floor}`;
-        result[floorKey] = {};
+        result[floorKey] = [];
         for (let unit = 1; unit <= units; unit++) {
-          const flatNumber = floor === 0 ? `G${unit}` : `${floor}0${unit}`;
-          result[floorKey][flatNumber] = generateFlatObject(flatNumber);
+          result[floorKey].push(floor === 0 ? `G${unit}` : `${floor}0${unit}`);
         }
       }
     } else if (formatType === 'vertical') {
       for (let unit = 1; unit <= units; unit++) {
         for (let floor = 1; floor <= floors; floor++) {
           const floorKey = `Floor ${floor}`;
-          if (!result[floorKey]) result[floorKey] = {};
-          const flatNumber = `${floor}0${unit}`;
-          result[floorKey][flatNumber] = generateFlatObject(flatNumber);
+          if (!result[floorKey]) result[floorKey] = [];
+          result[floorKey].push(`${floor}0${unit}`);
         }
       }
     }
   
     return result;
   };
-  
-  
 
   const handleNext = async () => {
     if (totalFloors && unitsPerFloor && selectedFormat !== null) {
       try {
-        
-        const sanitizedWing = (Wing as string).trim(); // Trim any trailing spaces
-        const docRef = doc(db, 'Societies', name as string);
+        const docRef = doc(db, 'Societies', societyName as string);
         const docSnap = await getDoc(docRef);
-        
+  
         if (!docSnap.exists()) {
           alert('Society does not exist!');
           return;
         }
-
+        setLoading(true);
+  
+        const wingRef = doc(docRef, 'wings', wingLetter as string);
+  
+        // Delete old floors and flats in the wing
+        const floorsRef = collection(wingRef, 'floors');
+        const floorsSnap = await getDocs(floorsRef);
+  
+        for (const floorDoc of floorsSnap.docs) {
+          const flatsRef = collection(floorsRef, floorDoc.id, 'flats');
+          const flatsSnap = await getDocs(flatsRef);
+  
+          // Delete all flats under the floor
+          for (const flatDoc of flatsSnap.docs) {
+            const billsRef = collection(flatsRef, flatDoc.id, 'bills');
+            const billsSnap = await getDocs(billsRef);
+  
+            // Delete all bills under the flat
+            for (const billDoc of billsSnap.docs) {
+              await deleteDoc(doc(billsRef, billDoc.id));
+            }
+  
+            await deleteDoc(doc(flatsRef, flatDoc.id)); // Delete flat document
+          }
+  
+          await deleteDoc(doc(floorsRef, floorDoc.id)); // Delete floor document
+        }
+  
         const floorWiseNumbers = generateFloorWiseNumbers();
         if (!floorWiseNumbers) return;
-
+  
         const wingData = {
           totalFloors: parseInt(totalFloors),
           unitsPerFloor: parseInt(unitsPerFloor),
           format: numberFormats[selectedFormat].type,
-          floorData: floorWiseNumbers,
         };
+  
+        // Update the wing data
+        await setDoc(wingRef, wingData, { merge: true });
+  
+        // Add new floors and flats
+        for (const floorName in floorWiseNumbers) {
+          const floorRef = doc(wingRef, 'floors', floorName);
+          await setDoc(floorRef, {
+            floorNumber: parseInt(floorName.replace('Floor ', '')),
+          });
+  
+          const flatsRef = collection(floorRef, 'flats');
+          floorWiseNumbers[floorName].forEach(async (flatNumber) => {
+            const flatRef = doc(flatsRef, flatNumber);
 
-        // Update or add the wing field in the document
-        await updateDoc(docRef, {
-          [`wings.${sanitizedWing}`]: wingData,
-        });
- 
+            // Construct the flatreference string
+            const flatReference = `${Wing}-${floorName}-${flatNumber}`;
+
+            await setDoc(flatRef, {
+              resident: 'owner',
+              flatType: 'owner',
+              flatreference: flatReference
+            });
+  
+            const billsRef = collection(flatRef, 'bills');
+            await addDoc(billsRef, {
+              amount: 0,
+            });
+          });
+        }
+  
         alert(`Data for Wing ${Wing} saved successfully!`);
-        
+  
         router.push({
           pathname: '/WingSetupScreen',
-          params: { Wing, name },
+          params: { Wing: wingLetter, societyName },
         });
       } catch (error) {
         console.error('Error saving data:', error);
         alert('Failed to save data. Please try again.');
+      } finally {
+        setLoading(false);
       }
     } else {
       alert('Please fill all fields and select a format!');
-    }
+    } 
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+  
+  
+  
 
   return (
     <View style={styles.container}>
@@ -183,6 +234,11 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: '#fff',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   heading: {
     fontSize: 20,

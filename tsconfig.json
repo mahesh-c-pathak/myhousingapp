@@ -4,9 +4,11 @@
     "strict": true,
     "paths": {
       "@firebase/auth": ["./node_modules/@firebase/auth/dist/index.rn.d.ts"],
-      "@/*": [
-        "./*"
-      ]
+      "@/*": [ "./*"],
+      "@utils/*": ["./utils/*"],
+      "@components/*": ["./components/*"],
+      "@firebaseConfig": ["./FirebaseConfig.ts"],
+      "@assets/*": ["./assets/*"],
     }
   },
   "include": [
@@ -14,5 +16,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-  ]
+, "../AwesomeProject/delete/BalanceSheet.tsx", "../AwesomeProject/delete/LedgerAccountsScreenNew.tsx"  ]
 }

@@ -1,116 +1,63 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, SectionList, TouchableOpacity } from "react-native";
-import { Text, FAB, List, ActivityIndicator, Button, TextInput } from "react-native-paper";
+import { Text, FAB, List, ActivityIndicator, Button, Appbar } from "react-native-paper";
 import { useRouter } from "expo-router";
-import { collection, getDocs } from "firebase/firestore";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { collection, getDocs, doc, getDoc, query, orderBy, limit, where } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
-
-interface LedgerGroup {
-  id: string;
-  name: string;
-  accounts: string[];
-}
-
-interface Transaction {
-  paidFrom: string;
-  paidTo: string;
-  amount: number;
-  type: string;
-}
+import PaymentDatePicker from "../../../utils/paymentDate";
 
 const LedgerAccountsScreen: React.FC = () => {
-  const [ledgerGroups, setLedgerGroups] = useState<LedgerGroup[]>([]);
   const [sectionedAccounts, setSectionedAccounts] = useState<{ title: string; data: { account: string; amount: number }[] }[]>([]);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-
-  
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  const fetchLatestBalanceBeforeDate = async (groupId: string, accountId: string, date: string) => {
+    const balancesCollection = collection(db, "ledgerGroupsFinal", groupId, "accounts", accountId, "balances");
+    const q = query(balancesCollection, where("date", "<=", date), orderBy("date", "desc"), limit(1));
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+      const data = snapshot.docs[0].data();
+      return data.cumulativeBalance ?? 0; // Use cumulativeBalance or default to 0
+    }
+    return 0; // Default to 0 if no balance is found
+  };
+ 
   useEffect(() => {
     const fetchLedgerGroups = async () => {
       setLoading(true);
       try {
-        const querySnapshot = await getDocs(collection(db, "ledgerGroups"));
-        const groups: LedgerGroup[] = [];
-
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          groups.push({ id: doc.id, ...data } as LedgerGroup);
+        const ledgerGroupsSnapshot = await getDocs(collection(db, "ledgerGroupsFinal"));
+        const groupPromises = ledgerGroupsSnapshot.docs.map(async (groupDoc) => {
+          const groupId = groupDoc.id;
+          const accountsSnapshot = await getDocs(collection(db, "ledgerGroupsFinal", groupId, "accounts"));
+          
+          const accountPromises = accountsSnapshot.docs.map(async (accountDoc) => {
+            const accountId = accountDoc.id;
+            const dateString = selectedDate.toISOString().split('T')[0];
+            const balance = await fetchLatestBalanceBeforeDate(groupId, accountId, dateString);
+            return { account: accountId, amount: balance };
+          });
+  
+          const accounts = await Promise.all(accountPromises);
+          return { title: groupId, data: accounts };
         });
-
-        setLedgerGroups(groups);
+  
+        const sections = await Promise.all(groupPromises);
+        setSectionedAccounts(sections.filter(section => section.data.length > 0));
+        setExpandedSections(sections.reduce((acc, section) => ({ ...acc, [section.title]: true }), {}));
       } catch (error) {
         console.error("Error fetching ledger groups:", error);
       } finally {
         setLoading(false);
       }
     };
-
-    const fetchTransactions = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "Transaction"));
-        const transactionData: Transaction[] = [];
-
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          transactionData.push({
-            paidFrom: data.paidFrom,
-            paidTo: data.paidTo,
-            amount: data.amount,
-            type: data.type,
-          });
-        });
-
-        setTransactions(transactionData);
-        
-      } catch (error) {
-        console.error("Error fetching transactions:", error);
-      }
-    };
-
+  
     fetchLedgerGroups();
-    fetchTransactions();
-  }, []);
-
-  useEffect(() => {
-    if (ledgerGroups.length > 0 && transactions.length > 0) {
-      // Calculate net amounts for each account
-      const accountBalances: Record<string, number> = {};
-      transactions.forEach((txn) => {
-        if (txn.paidFrom) {
-          accountBalances[txn.paidFrom] = (accountBalances[txn.paidFrom] || 0) - txn.amount;
-        }
-        if (txn.paidTo) {
-          accountBalances[txn.paidTo] = (accountBalances[txn.paidTo] || 0) + txn.amount;
-        }
-      });
-
-      // Organize accounts into sections
-      const sections = ledgerGroups.map((group) => ({
-        title: group.name,
-        data: group.accounts
-          .map((account) => ({
-            account,
-            amount: accountBalances[account] || 0,
-          }))
-          .filter((item) => item.account.trim() !== ""), // Exclude empty account names
-      }));
-
-      setSectionedAccounts(sections);
-      setExpandedSections(sections.reduce((acc, section) => ({ ...acc, [section.title]: false }), {}));
-    }
-  }, [ledgerGroups, transactions]);
-
+  }, [selectedDate]);
   
-
-  
-
   const toggleSection = (title: string) => {
     setExpandedSections((prev) => ({ ...prev, [title]: !prev[title] }));
   };
@@ -125,56 +72,49 @@ const LedgerAccountsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TextInput
-          label="As on Date"
-          value={selectedDate.toISOString().split("T")[0]}
-          style={styles.dateInput}
-          onFocus={() => setShowDatePicker(true)}
-        />
-        <Button mode="contained" style={styles.goButton}>
+      {/* Top Appbar */}
+      <Appbar.Header style={styles.header}>
+        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+        <Appbar.Content title="Ledger Accounts" titleStyle={styles.titleStyle} />
+      </Appbar.Header>
+      <View style={styles.headerview}>
+        <View style={styles.section}>
+          <Text style={styles.label}>As on Date</Text>
+          <PaymentDatePicker
+            initialDate={selectedDate}
+            onDateChange={setSelectedDate}
+          />
+        </View>
+        <Button mode="contained" style={styles.goButton} onPress={() => setSelectedDate(new Date(selectedDate))}>
           Go
         </Button>
       </View>
 
-      {showDatePicker && (
-        <DateTimePicker value={selectedDate} mode="date" display="default" onChange={(event, date) => setSelectedDate(date || selectedDate)} />
-      )}
-
-<SectionList
+      <SectionList
         sections={sectionedAccounts}
         keyExtractor={(item, index) => index.toString()}
         renderSectionHeader={({ section: { title } }) => (
-          <TouchableOpacity onPress={() => toggleSection(title)}>
-            <List.Subheader>{title}</List.Subheader>
+          <TouchableOpacity onPress={() => toggleSection(title)} style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{title}</Text>
           </TouchableOpacity>
         )}
         renderItem={({ item, section }) =>
           expandedSections[section.title] ? (
-            <TouchableOpacity
-              style={styles.inlineItem}
-              onPress={() => {
-                router.push({
-                  pathname: "/AccountDetailScreen",
-                  params: {
-                    account: item.account,
-                    amount: item.amount,
-                  },
-                });
-              }}
-              >
-
-              <Text style={styles.accountName}> {item.account}</Text>
-              <Text style={styles.accountAmount}>
-                ₹ {item.amount.toFixed(2)}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.inlineItem}>
+              <Text style={styles.accountName}>{`   ${item.account}`}</Text>
+              <Text style={styles.accountAmount}>₹ {item.amount.toFixed(2)}</Text>
+            </View>
           ) : null
         }
         ListEmptyComponent={<Text style={styles.emptyText}>No accounts to display</Text>}
       />
 
-      <FAB style={styles.fab} icon="plus" onPress={() => router.push("/AddLedgerAccountScreen")} />
+      <FAB
+       style={styles.fab} 
+       icon="plus" 
+       onPress={() => router.push("/AddLedgerAccountScreen")} 
+       color="white" // Set the icon color to white
+       />
     </View>
   );
 };
@@ -184,28 +124,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   loaderContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  header: {
+  headerview: {
     flexDirection: "row",
-    padding: 16,
+    padding: 10,
     alignItems: "center",
-  },
-  dateInput: {
-    flex: 1,
-    marginRight: 8,
-    backgroundColor: "#fff",
   },
   goButton: {
     backgroundColor: "#4caf50",
   },
+  sectionHeader: {
+    backgroundColor: "#eaeaea",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
   inlineItem: {
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderBottomWidth: 0.5,
     borderBottomColor: "#ddd",
   },
@@ -226,7 +173,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 16,
   },
+  section: {
+    flex: 1,
+    marginRight: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 6,
+  },
 });
 
 export default LedgerAccountsScreen;
- 
