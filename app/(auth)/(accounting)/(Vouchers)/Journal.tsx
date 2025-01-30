@@ -16,8 +16,13 @@ import CustomInput from '../../../../components/CustomInput';
 import Dropdown from "../../../../utils/DropDown";
 import PaymentDatePicker from "../../../../utils/paymentDate";
 
+import { useSociety } from "@/utils/SocietyContext";
+
 
 const journal: React.FC = () => {
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
+
   const router = useRouter();
   const params = useLocalSearchParams(); // Extract parameters like `id`
 
@@ -32,17 +37,12 @@ const journal: React.FC = () => {
   const [customVoucher, setCustomVoucher] = useState<string>("");
   const [paymentNote, setPaymentNote] = useState<string>("");
  
-
-  const [menuFromVisible, setMenuFromVisible] = useState<boolean>(false);
-  const [menuToVisible, setMenuToVisible] = useState<boolean>(false);
-
   const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
   const [accountToOptions, setAccountToOptions] = useState<{ label: string; value: string; group: string }[]>([]);
 
   const [asOnDate, setAsOnDate] = useState<Date>(new Date());
   const [loading, setLoading] = useState(false);
 
-  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
   const [expenseOptions, setExpenseOptions] = useState<string[]>([]);
@@ -69,7 +69,7 @@ const journal: React.FC = () => {
       if (params?.id) {
         setIsEditMode(true);
         try {
-          const transactionRef = doc(db, "Transaction", params.id as string);
+          const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
           const transactionDoc = await getDoc(transactionRef);
 
           if (transactionDoc.exists()) {
@@ -102,7 +102,7 @@ const journal: React.FC = () => {
       useEffect(() => {
         const fetchOptions = async () => {
           try {
-            const { accountOptions } = await fetchAccountList(journalFromToGroupList);
+            const { accountOptions } = await fetchAccountList(societyName,journalFromToGroupList);
             setAccountFromOptions(accountOptions);
             setAccountToOptions(accountOptions);
           } catch (error) {
@@ -115,7 +115,7 @@ const journal: React.FC = () => {
   useEffect(() => {
     const fetchExpenseOptions = async () => {
           try {
-              const ledgerGroupsRef = collection(db, "ledgerGroups");
+              const ledgerGroupsRef = collection(db, "Societies", societyName, transactionCollectionName);
       
               const expenseQuerySnapshot = await getDocs(
                 query(ledgerGroupsRef, where("name", "in", ["Direct Expenses", "Indirect Expenses"]))
@@ -186,7 +186,7 @@ const journal: React.FC = () => {
   
       if (isEditMode && params?.id) {
         // Update existing transaction
-        const transactionRef = doc(db, "Transaction", params.id as string);
+        const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
         const transactionDoc = await getDoc(transactionRef);
         if (!transactionDoc.exists()) {
           Alert.alert("Error", "Transaction not found.");
@@ -201,12 +201,12 @@ const journal: React.FC = () => {
         await updateDoc(transactionRef, transaction);
 
         // Revert original ledger updates
-        await updateLedger(groupFrom, originalPaidFrom, originalAmount, "Add", formattedDate);
-        await updateLedger(groupTo,originalPaidTo, originalAmount, "Subtract", formattedDate);
+        await updateLedger(societyName, groupFrom, originalPaidFrom, originalAmount, "Add", formattedDate);
+        await updateLedger(societyName, groupTo,originalPaidTo, originalAmount, "Subtract", formattedDate);
 
         // Apply new ledger updates
-        await updateLedger(groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
-        await updateLedger(groupTo, paidTo, parsedAmount, "Add", formattedDate);
+        await updateLedger(societyName,groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
+        await updateLedger(societyName, groupTo, paidTo, parsedAmount, "Add", formattedDate);
 
         Alert.alert("Success", "Transaction updated successfully!", [
             {
@@ -219,11 +219,11 @@ const journal: React.FC = () => {
         const voucher = await generateVoucherNumber();
         transaction.voucher = voucher;
 
-        await addDoc(collection(db, "Transaction"), transaction);
+        await addDoc(collection(db, "Societies", societyName, transactionCollectionName), transaction);
 
         // Update ledger            
-        await updateLedger(groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
-        await updateLedger(groupTo, paidTo, parsedAmount, "Add", formattedDate);
+        await updateLedger(societyName,groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
+        await updateLedger(societyName,groupTo, paidTo, parsedAmount, "Add", formattedDate);
 
         Alert.alert("Success", "Transaction saved successfully!", [
             {

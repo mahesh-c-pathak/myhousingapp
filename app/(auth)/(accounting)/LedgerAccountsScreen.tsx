@@ -3,8 +3,9 @@ import { View, StyleSheet, SectionList, TouchableOpacity } from "react-native";
 import { Text, FAB, List, ActivityIndicator, Button, Appbar } from "react-native-paper";
 import { useRouter } from "expo-router";
 import { collection, getDocs, doc, getDoc, query, orderBy, limit, where } from "firebase/firestore";
-import { db } from "../../../FirebaseConfig";
-import PaymentDatePicker from "../../../utils/paymentDate";
+import { db } from "@/FirebaseConfig";
+import PaymentDatePicker from "@/utils/paymentDate";
+import { useSociety } from "@/utils/SocietyContext";
 
 const LedgerAccountsScreen: React.FC = () => {
   const [sectionedAccounts, setSectionedAccounts] = useState<{ title: string; data: { account: string; amount: number }[] }[]>([]);
@@ -12,9 +13,14 @@ const LedgerAccountsScreen: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { societyName } = useSociety();
+  const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`;
+  const accountsCollectionName = `accounts_${societyName}`;
+  const balancesCollectionName = `balances_${societyName}`;
+
 
   const fetchLatestBalanceBeforeDate = async (groupId: string, accountId: string, date: string) => {
-    const balancesCollection = collection(db, "ledgerGroupsFinal", groupId, "accounts", accountId, "balances");
+    const balancesCollection = collection(db, "Societies", societyName, ledgerGroupsCollectionName, groupId, accountsCollectionName, accountId, balancesCollectionName);
     const q = query(balancesCollection, where("date", "<=", date), orderBy("date", "desc"), limit(1));
     const snapshot = await getDocs(q);
 
@@ -29,10 +35,10 @@ const LedgerAccountsScreen: React.FC = () => {
     const fetchLedgerGroups = async () => {
       setLoading(true);
       try {
-        const ledgerGroupsSnapshot = await getDocs(collection(db, "ledgerGroupsFinal"));
+        const ledgerGroupsSnapshot = await getDocs(collection(db, "Societies", societyName, ledgerGroupsCollectionName));
         const groupPromises = ledgerGroupsSnapshot.docs.map(async (groupDoc) => {
           const groupId = groupDoc.id;
-          const accountsSnapshot = await getDocs(collection(db, "ledgerGroupsFinal", groupId, "accounts"));
+          const accountsSnapshot = await getDocs(collection(db, "Societies", societyName, ledgerGroupsCollectionName, groupId, accountsCollectionName));
           
           const accountPromises = accountsSnapshot.docs.map(async (accountDoc) => {
             const accountId = accountDoc.id;

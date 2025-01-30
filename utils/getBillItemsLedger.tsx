@@ -9,17 +9,20 @@ interface Item {
     ownerAmount?: number;
     rentAmount?: number;
     closedUnitAmount?: number;
-    ledgerAccount?: string;
-    groupFrom?: string
+    ledgerAccount: string;
+    groupFrom: string;
+    invoiceDate: string;
   }
-
+ 
 // Function to get `updatedLedgerAccount` and amount based on residentType
 export const getBillItemsLedger = async (
+  societyName: string,
     billNumber: string, // Bill document ID
     residentType: "owner" | "Tenant" | "Closed" // Resident type
-  ): Promise<{ updatedLedgerAccount: string; ledgerAccount?: string; amount: number }[]> => {
+  ): Promise<{ updatedLedgerAccount: string; ledgerAccount: string; amount: number; groupFrom: string; invoiceDate: string; }[]> => {
     try {
-      const billDocRef = doc(db, "bills", billNumber); // Reference to the bill document
+      const specialBillCollectionName = `specialBills_${societyName}`;
+      const billDocRef = doc(db,"Societies", societyName, specialBillCollectionName, billNumber); // Reference to the bill document
       const billSnapshot = await getDoc(billDocRef);
   
       if (!billSnapshot.exists()) {

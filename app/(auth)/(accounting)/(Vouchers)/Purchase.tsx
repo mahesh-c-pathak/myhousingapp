@@ -18,6 +18,8 @@ import Dropdown from "../../../../utils/DropDown";
 import PaymentDatePicker from "../../../../utils/paymentDate";
 
 const Purchase: React.FC = () => {
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
   const router = useRouter();
   const params = useLocalSearchParams(); // Extracts params such as `id` for edit mode.
   const { assetAccounts, liabilityAccounts, incomeAccounts, expenditureAccounts,} = useSociety();
@@ -63,7 +65,7 @@ const Purchase: React.FC = () => {
       if (params?.id) {
         setIsEditMode(true);
         try {
-          const transactionRef = doc(db, "Transaction", params.id as string);
+          const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
           const transactionDoc = await getDoc(transactionRef);
 
           if (transactionDoc.exists()) {
@@ -96,7 +98,7 @@ const Purchase: React.FC = () => {
           useEffect(() => {
             const fetchbankCashOptions = async () => {
               try {
-                const { accountFromOptions } = await fetchbankCashAccountOptions();
+                const { accountFromOptions } = await fetchbankCashAccountOptions(societyName);
                 setAccountFromOptions(accountFromOptions);
               } catch (error) {
                 Alert.alert("Error", "Failed to fetch bank Cash account options.");
@@ -110,7 +112,7 @@ const Purchase: React.FC = () => {
       useEffect(() => {
         const fetchOptions = async () => {
           try {
-            const { accountOptions } = await fetchAccountList(purchaseToGroupsList);
+            const { accountOptions } = await fetchAccountList(societyName,purchaseToGroupsList);
             setAccountToOptions(accountOptions);
           } catch (error) {
             Alert.alert("Error", "Failed to fetch account options.");
@@ -164,7 +166,7 @@ const Purchase: React.FC = () => {
 
 
       if (isEditMode && params?.id) {
-        const transactionRef = doc(db, "Transaction", params.id as string);
+        const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
         const transactionDoc = await getDoc(transactionRef);
         if (!transactionDoc.exists()) {
           Alert.alert("Error", "Transaction not found.");
@@ -180,6 +182,7 @@ const Purchase: React.FC = () => {
 
          // Revert original ledger updates
           await updateLedger(
+            societyName,
             groupTo,
             originalPaidTo,
             originalAmount,
@@ -187,6 +190,7 @@ const Purchase: React.FC = () => {
             formattedDate
           );
           await updateLedger(
+            societyName,
             groupFrom,
             originalPaidFrom,
             originalAmount,
@@ -196,6 +200,7 @@ const Purchase: React.FC = () => {
 
           // Apply new ledger updates
           await updateLedger(
+            societyName,
             groupTo,
             paidTo,
             parsedAmount,
@@ -203,6 +208,7 @@ const Purchase: React.FC = () => {
             formattedDate
           );
         await updateLedger(
+          societyName,
           groupFrom,
           paidFrom,
           parsedAmount,
@@ -221,11 +227,12 @@ const Purchase: React.FC = () => {
         const voucher = customVoucher || (await generateVoucherNumber());
         transaction.voucher = voucher;
 
-        await addDoc(collection(db, "Transaction"), transaction);
+        await addDoc(collection(db, "Societies", societyName, transactionCollectionName), transaction);
 
         // Update ledger            
-         await updateLedger( groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
+         await updateLedger(societyName, groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
          await updateLedger(
+                       societyName,
                        groupTo,
                        paidTo,
                        parsedAmount,

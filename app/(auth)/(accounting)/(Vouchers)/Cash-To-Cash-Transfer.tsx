@@ -4,7 +4,6 @@ import { TextInput, Button, Card, Menu, Appbar, ActivityIndicator } from "react-
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { collection, doc, getDoc, getDocs, query, where, addDoc, updateDoc } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { updateLedger } from "../../../../utils/updateLedger";
 
@@ -16,7 +15,12 @@ import CustomInput from '../../../../components/CustomInput';
 import Dropdown from "../../../../utils/DropDown";
 import PaymentDatePicker from "../../../../utils/paymentDate"
 
+import { useSociety } from "@/utils/SocietyContext";
+
 const CashToCashTransfer: React.FC = () => {
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
+
   const router = useRouter();
   const params = useLocalSearchParams(); // Extract parameters like `id`
 
@@ -30,10 +34,6 @@ const CashToCashTransfer: React.FC = () => {
   const [amount, setAmount] = useState<string>("");
   const [customVoucher, setCustomVoucher] = useState<string>("");
   const [paymentNote, setPaymentNote] = useState<string>("");
-  const [transactionDate, setTransactionDate] = useState<Date>(new Date());
-
-  const [menuFromVisible, setMenuFromVisible] = useState<boolean>(false);
-  const [menuToVisible, setMenuToVisible] = useState<boolean>(false);
 
   const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
   const [accountToOptions, setAccountToOptions] = useState<{ label: string; value: string; group: string }[]>([]);
@@ -64,7 +64,7 @@ const CashToCashTransfer: React.FC = () => {
       if (params?.id) {
         setIsEditMode(true);
         try {
-          const transactionRef = doc(db, "Transaction", params.id as string);
+          const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
           const transactionDoc = await getDoc(transactionRef);
 
           if (transactionDoc.exists()) {
@@ -99,7 +99,7 @@ const CashToCashTransfer: React.FC = () => {
           useEffect(() => {
             const fetchbankOptions = async () => {
               try {
-                const { cashAccountOptions } = await fetchbankCashAccountOptions();
+                const { cashAccountOptions } = await fetchbankCashAccountOptions(societyName);
                 setAccountToOptions(cashAccountOptions); 
               } catch (error) {
                 Alert.alert("Error", "Failed to fetch bank Cash account options.");
@@ -113,7 +113,7 @@ const CashToCashTransfer: React.FC = () => {
       useEffect(() => {
         const fetchCashOptions = async () => {
           try {
-            const { cashAccountOptions } = await fetchbankCashAccountOptions();
+            const { cashAccountOptions } = await fetchbankCashAccountOptions(societyName);
             setAccountFromOptions(cashAccountOptions);
           } catch (error) {
             Alert.alert("Error", "Failed to fetch bank Cash account options.");
@@ -174,7 +174,7 @@ const CashToCashTransfer: React.FC = () => {
   
       if (isEditMode && params?.id) {
         // Update existing transaction
-        const transactionRef = doc(db, "Transaction", params.id as string);
+        const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
         const transactionDoc = await getDoc(transactionRef);
         if (!transactionDoc.exists()) {
           Alert.alert("Error", "Transaction not found.");
@@ -193,6 +193,7 @@ const CashToCashTransfer: React.FC = () => {
 
         // Revert original ledger updates
         await updateLedger(
+          societyName,
           originalGroupFrom,
           originalPaidFrom,
           originalAmount,
@@ -201,6 +202,7 @@ const CashToCashTransfer: React.FC = () => {
                     );
 
         await updateLedger(
+          societyName,
           originalGroupTo,
           originalPaidTo,
           originalAmount,
@@ -209,8 +211,8 @@ const CashToCashTransfer: React.FC = () => {
         );
 
         // Apply new ledger updates
-        await updateLedger( groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
-        await updateLedger( groupTo, paidTo, parsedAmount, "Add",formattedDate);
+        await updateLedger(societyName, groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
+        await updateLedger(societyName, groupTo, paidTo, parsedAmount, "Add",formattedDate);
 
         Alert.alert("Success", "Transaction updated successfully!", [
             {
@@ -223,12 +225,12 @@ const CashToCashTransfer: React.FC = () => {
         const voucher = await generateVoucherNumber();
         transaction.voucher = voucher;
 
-        await addDoc(collection(db, "Transaction"), transaction);
+        await addDoc(collection(db, "Societies", societyName, transactionCollectionName), transaction);
 
         // Update ledger        
         const updatePromises = [];
-        const LedgerUpdate1 = await updateLedger(groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate ); // Update Ledger
-        const LedgerUpdate2 = await updateLedger( groupTo, paidTo, parsedAmount, "Add", formattedDate ); // Update Ledger
+        const LedgerUpdate1 = await updateLedger(societyName, groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate ); // Update Ledger
+        const LedgerUpdate2 = await updateLedger(societyName, groupTo, paidTo, parsedAmount, "Add", formattedDate ); // Update Ledger
         updatePromises.push(
           LedgerUpdate1, LedgerUpdate2
         );

@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, FlatList, Pressable, TouchableWithoutFeedback }
 import { TextInput, Button, Card, FAB, Surface, Menu, Divider, IconButton } from "react-native-paper";
 import { useRouter } from "expo-router";
 import { useLocalSearchParams, useNavigation } from "expo-router";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, collectionGroup } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
 import AppbarComponent from '../../../../components/AppbarComponent';
 import AppbarMenuComponent from '../../../../components/AppbarMenuComponent';
@@ -24,11 +24,12 @@ const GenerateSpecialBills = () => {
   const router = useRouter();
   const navigation = useNavigation();
 
-  useEffect(() => {
-    navigation.setOptions({
-        headerTitle:"Generate Special Bills",
-    })
-  }, []);
+  const customWingsSubcollectionName = `${societyName} wings`;
+  const customFloorsSubcollectionName = `${societyName} floors`;
+  const customFlatsSubcollectionName = `${societyName} flats`;
+  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+
+  const specialBillCollectionName = `specialBills_${societyName}`;
 
   const [bills, setBills] = useState<BillData[]>([]);
 
@@ -41,20 +42,8 @@ const GenerateSpecialBills = () => {
       console.log('societyName', societyName);
       try {
         // Fetch bills from the "bills" collection
-        const billsSnapshot = await getDocs(collection(db, "bills"));
+        const billsSnapshot = await getDocs(collection(db, "Societies", societyName, specialBillCollectionName,));
         
-        // Fetch society data (main society document)
-        const societiesDocRef = doc(db, "Societies", societyName);
-        const societyDocSnap = await getDoc(societiesDocRef);
-    
-        if (!societyDocSnap.exists()) {
-          console.error("Societies document does not exist");
-          return;
-        }
-    
-        const societyData = societyDocSnap.data();
-        console.log('societyData', societyData);
-    
         const billsData: BillData[] = [];
     
         // Iterate through each bill document
@@ -68,42 +57,24 @@ const GenerateSpecialBills = () => {
     
           let unpaidAmount = 0;
           let paidAmount = 0;
-    
-          // Traverse the new structure in Societies: Fetch data from collections instead of document fields
-          const wingsCollectionRef = collection(societiesDocRef, "wings");
-          const wingsSnapshot = await getDocs(wingsCollectionRef);
-    
-          // Use for...of instead of forEach to handle async await properly
-          for (const wingDoc of wingsSnapshot.docs) {
-            const wingData = wingDoc.data();
-            
-            // Fetch floors collection for each wing
-            const floorsCollectionRef = collection(wingDoc.ref, "floors");
-            const floorsSnapshot = await getDocs(floorsCollectionRef);
-    
-            for (const floorDoc of floorsSnapshot.docs) {
-              const floorData = floorDoc.data();
-              
-              // Fetch flats collection for each floor
-              const flatsCollectionRef = collection(floorDoc.ref, "flats");
-              const flatsSnapshot = await getDocs(flatsCollectionRef);
-    
-              for (const flatDoc of flatsSnapshot.docs) {
-                const flatData = flatDoc.data();
-    
-                // Check if the flat contains the bill
-                if (flatData.bills && flatData.bills[billNumber]) {
-                  const { amount, status } = flatData.bills[billNumber];
-                  if (status === "unpaid") {
-                    unpaidAmount += amount;
-                  } else if (status === "paid") {
-                    paidAmount += amount;
-                  }
+
+           // create the bill path ref
+          const flatsBillSnapshot = await getDocs(collectionGroup(db, customFlatsBillsSubcollectionName));
+          flatsBillSnapshot.forEach((doc) => {
+              const flatbillId = doc.id;
+              if (flatbillId === billNumber) {
+                const billsPerFlatData = doc.data();
+                const amount = billsPerFlatData.amount;
+                const status = billsPerFlatData.status;
+
+                if (status === "unpaid") {
+                  unpaidAmount += amount;
+                } else if (status === "paid") {
+                  paidAmount += amount;
                 }
               }
-            }
-          }
-    
+            }) 
+
           // Push the aggregated bill data
           billsData.push({
             id: billDoc.id,

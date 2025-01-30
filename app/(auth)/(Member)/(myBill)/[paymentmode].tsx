@@ -7,7 +7,7 @@ import {
   Menu,
   TextInput 
 } from 'react-native-paper';
-import { collection, getDocs, doc, getDoc, setDoc  } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, setDoc, updateDoc, addDoc  } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
 import { useSociety } from "../../../../utils/SocietyContext";
 import { generateTransactionId } from "../../../../utils/generateTransactionId";
@@ -20,6 +20,13 @@ const PaymentModeScreen = () => {
   const wing =  societyContext.wing;
   const flatNumber =  societyContext.flatNumber;
   const floorName = societyContext.floorName;
+
+  const customWingsSubcollectionName = `${societyName} wings`;
+    const customFloorsSubcollectionName = `${societyName} floors`;
+    const customFlatsSubcollectionName = `${societyName} flats`;
+    const customFlatsBillsSubcollectionName = `${societyName} bills`;
+
+    const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`
 
   const { paymentMode, amount, selectedIds } = useLocalSearchParams();
   const router = useRouter();
@@ -57,9 +64,58 @@ const PaymentModeScreen = () => {
     setShowDatePicker(false);
   };
 
+  
   // Handle save
-   
+
   const handleSave = async () => {
+    try {
+      const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
+      const flatDocRef = doc(db, flatRef);
+      const unclearedBalanceRef = collection(flatDocRef, unclearedBalanceSubcollectionName);
+      let transactionId = generateTransactionId();
+  
+      // Define document fields
+      const docData = {
+        status: "Uncleared",
+        amountPaid: parseFloat(amount as string), 
+        paymentDate: formattedDate, 
+        paymentMode: paymentMode || "Other", 
+        bankName: bankName || null, 
+        chequeNo: chequeNo || null, 
+        transactionId, 
+        selectedIds: selectedIds ? JSON.parse(selectedIds as string) : [],
+        
+      };
+  
+      // Keep generating a new transactionId if it already exists
+      let docRef = doc(unclearedBalanceRef, transactionId);
+      let docSnap = await getDoc(docRef);
+      
+      while (docSnap.exists()) {
+        transactionId = generateTransactionId(); // Generate a new ID
+        docRef = doc(unclearedBalanceRef, transactionId); // Update docRef
+        docSnap = await getDoc(docRef); // Check again
+      }
+  
+      // Set the document once we have a unique transactionId
+      await setDoc(docRef, docData);
+      console.log("Uncleared Balance Document created successfully.");
+  
+      Alert.alert(
+        "Cash",
+        "Your Payment request has been successfully submitted to Admin. You will get a notification after verification."
+      );
+  
+      router.replace("/(myBill)");
+      
+    } catch (error) {
+      console.error("Error saving uncleared balance:", error);
+      Alert.alert("Error", "Failed to save payment. Please try again.");
+    }
+  };
+  
+   
+  const handleSaveold = async () => {
     try {
       // Parse selectedIds from JSON string to array
       const parsedSelectedIds = selectedIds ? JSON.parse(selectedIds as string) : [];

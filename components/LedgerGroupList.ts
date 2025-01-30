@@ -30,6 +30,93 @@ type LedgerGroup = {
     { label: 'Suspense Account', value: 'Suspense Account' },
   ];
 
+  const ledgerGroupsNameList = [
+    'Account Payable',
+    'Account Receivable',
+    'Bank Accounts',
+    'Capital Account',
+    'Cash in Hand',
+    'Current Assets',
+    'Current Liabilities',
+    'Deposit',
+    'Direct Expenses',
+    'Direct Income',
+    'Fixed Assets',
+    'Indirect Expenses',
+    'Indirect Income',
+    'Investment',
+    'Late Payment',
+    'Loan and Advances',
+    'Maintenance & Repairing',
+    'Provision',
+    'Reserve and Surplus',
+    'Share Capital',
+    'Sundry Creditors',
+    'Sundry Debtors',
+    'Suspense Account',
+  ];
+
+  const CashinHandList = [
+    "Cash"
+  ];
+
+  const BankAccountsList = [
+    "Bank"
+  ];
+
+  const IndirectExpensesList = [
+    'Account Audit Expenses',
+    'Depreciation',
+    'Electricity Charges',
+    'Festival Exp',
+    'House Keeping Material',
+    'Miscellaneous Expenses',
+    'Printing and Stationary Expenses',
+    'Repair and Maintenance',
+    'Salary Expenses',
+    'Security',
+    'Water Tanker Expenses',
+  ];
+
+  const IndirectIncomeList = [
+    'Club House Income',
+    'Donation Received',
+    'Electricity Income Collection',
+    'FD Income Interest',
+    'Interest Received',
+    'Late Payment Income',
+    'Maintenance Collections',
+    'Membership Income',
+    'Miscellaneous Income',
+    'Non Occupancy Income',
+    'Sale of Movable Asset',
+    'Transfer Fees',
+    'Water Consumption Collection',
+  ];
+  const AccountReceivableList = [
+    "Club House Income Receivables",
+    "Donation Received Receivables",
+    "Electricity Income Collection Receivables",
+    "FD Income Interest Receivables",
+    "Interest Received Receivables",
+    "Late Payment Income Receivables",
+    "Maintenance Collections Receivables",
+    "Members Advanced Receivables",
+    "Membership Income Receivables",
+    "Miscellaneous Income Receivables",
+    "Non Occupancy Income Receivables",
+    "Sale of Movable Asset Receivables",
+    "Sinking Funds Receivables",
+    "Transfer Fees Receivables",
+    "Water Consumption Collection Receivables",
+  ];
+  const CurrentLiabilitiesList =[
+    "Members Advanced",
+  ];
+  const ReserveandSurplusList = [
+    "Sinking Funds",
+  ];
+
   const expenseToGroupsList  = [
     "Account Payable",
     "Current Liabilities",
@@ -152,6 +239,13 @@ type LedgerGroup = {
     "Suspense Account",
 ]
   
-export { ledgerGroupsList, expenseToGroupsList, incomeFromGroupsList, receiptFromToGroupsList,
-   purchaseToGroupsList, journalFromToGroupList, transactionFromToGroupList, billItemLedgerGroupList };
+export { ledgerGroupsList, ledgerGroupsNameList,
+          BankAccountsList,CashinHandList,
+          IndirectExpensesList, IndirectIncomeList,
+          AccountReceivableList, CurrentLiabilitiesList,
+          ReserveandSurplusList,
+         expenseToGroupsList, incomeFromGroupsList,
+         receiptFromToGroupsList, purchaseToGroupsList, 
+         journalFromToGroupList, transactionFromToGroupList, 
+         billItemLedgerGroupList };
    

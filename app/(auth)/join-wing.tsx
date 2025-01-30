@@ -14,17 +14,30 @@ import { useSession } from "@utils/ctx";
 type FlatData = {
   flatType: string;
   resident: string;
+  memberStatus: string;
+  ownerRegisterd?: string; // Optional property
+  renterRegisterd?: string; // Optional property
+  
 };
 
 type FlatsData = Record<string, Record<string, Record<string, FlatData>>>;
 
-const flatTypes = ['owner', 'Closed', 'Rent', 'Dead', 'Shop'];
+const flatTypes = ['owner', 'Closed', 'Rent', 'Dead', 'Shop', 'Registerd'];
 const flatColors: Record<string, string> = {
   owner: '#2196F3', // Blue
   Closed: '#808080', // Grey
   Rent: '#FFA500', // Orange
   Dead: '#000000', // Black
   Shop: '#FF00FF', // Magenta
+  Registerd: '#2E8B57', // Green
+};
+
+type UserDetails = {
+  [userId: string]: {
+    userName: string;
+    userStatus: string;
+    userType: string;
+  };
 };
 
 const joinWing = () => {
@@ -36,6 +49,11 @@ const joinWing = () => {
   const userId = user?.uid
 
   const navigation = useNavigation();
+
+  const customWingsSubcollectionName = `${mysocietyName} wings`;
+  const customFloorsSubcollectionName = `${mysocietyName} floors`;
+  const customFlatsSubcollectionName = `${mysocietyName} flats`;
+  const customFlatsBillsSubcollectionName = `${mysocietyName} bills`;
 
   const [selectedWing, setSelectedWing] = useState<string | null>(null);
 
@@ -59,7 +77,7 @@ const joinWing = () => {
   const fetchFlatsData = async () => {
     setLoading(true);
     try {
-      const flatsQuerySnapshot = await getDocs(collectionGroup(db, "flats"));
+      const flatsQuerySnapshot = await getDocs(collectionGroup(db, customFlatsSubcollectionName));
       const data: Record<string, any> = {};
       
   
@@ -76,9 +94,13 @@ const joinWing = () => {
         if (!data[wing][floor]) data[wing][floor] = {};
   
         const flatType = flatData.flatType || "";
+        
         data[wing][floor][flatId] = {
           flatType,
           resident: flatData.resident || "",
+          memberStatus: flatData.memberStatus || "",
+          ownerRegisterd: flatData.ownerRegisterd || "",
+          renterRegisterd: flatData.renterRegisterd || "",
         };
   
         
@@ -123,6 +145,16 @@ const joinWing = () => {
   }, [selectedWing, flatsData]);
 
   const handleFlatPress = (flatId: string, flatType: string, floor: string) => {
+    const selectedFlatData = flatsData[selectedWing!][floor][flatId];
+  
+    if (selectedFlatData.memberStatus === "Registered") {
+      Alert.alert("Already Registered", "This unit is already registered.");
+      return; // Stop further execution
+    } else if (selectedFlatData.memberStatus === "Pending Approval") {
+      Alert.alert("Pending Approval", "The registration of this unit is still under approval.");
+      return; // Stop further execution
+    }
+
     setSelectedFlat(flatId);
     setSelectedFlatType(flatType); // Store the flatType directly
     setSelectedFloor(floor); // Save the selected floor
@@ -151,8 +183,11 @@ const joinWing = () => {
           wing,
           floor,
           flat,
-          userType!
+          userType!,
+          selectedFlatType!,
         );
+
+
       } catch (error) {
         console.error("Error in handleYesPressed:", error);
         Alert.alert("Error", "An error occurred while processing your request.");
@@ -167,16 +202,20 @@ const joinWing = () => {
       wingname: string,
       floorname: string,
       flatnumber: string,
-      userType: string
+      userType: string,
+      FlatType: string,
     ) => {
       setLoading(true);
     
       try {
         const userDocRef = doc(db, "users", userId);
         const userDocSnap = await getDoc(userDocRef);
+        // Initialize variables
+        let userName: string = userId; // Default userName to userId
     
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
+          userName = userData.name || userId; // Use the outer userName variable
           const mySociety = userData.mySociety || [];
     
           const societyIndex = mySociety.findIndex(
@@ -194,6 +233,7 @@ const joinWing = () => {
                         [flatnumber]: {
                           userType,
                           userStatus: "Pending Approval",
+                          FlatType,
                         },
                       },
                     },
@@ -223,6 +263,7 @@ const joinWing = () => {
                       [flatnumber]: {
                         userType,
                         userStatus: "Pending Approval",
+                        FlatType,
                       },
                     },
                   },
@@ -252,6 +293,7 @@ const joinWing = () => {
                           [flatnumber]: {
                             userType,
                             userStatus: "Pending Approval",
+                            FlatType
                           },
                         },
                       },
@@ -264,6 +306,8 @@ const joinWing = () => {
     
           console.log("User document created with new mySociety array.");
         }
+
+        addUserDetailsToFlat(societyname, wingname, floorname, flatnumber,userName, userId, "Pending Approval", userType, FlatType )
     
         Alert.alert(
           "Success",
@@ -300,7 +344,10 @@ const joinWing = () => {
                 <View style={styles.row}>
                   {Object.keys(flatsData[selectedWing][floor]).map((flat) => {
                     const flatData = flatsData[selectedWing][floor][flat];
-                    const flatColor = flatColors[flatData.flatType] || flatColors['owner']; // Default color if flatType is not found
+                    const flatColor =
+                    flatData.memberStatus === "Registered"
+                      ? "#2E8B57" // Green for registered
+                      : flatColors[flatData.flatType] || flatColors["owner"]; // Default to owner color if flatType is missing
                     return (
                       <TouchableOpacity
                         key={flat}
@@ -320,6 +367,77 @@ const joinWing = () => {
     );
   };
 
+    const addUserDetailsToFlat = async (
+        societyName: string,
+        wing: string,
+        floorName: string,
+        flatNumber: string,
+        userName: string,
+        userId: string,
+        approvalStatus: string,
+        userType: string,
+        flatType: string
+      ) => {
+        try {
+          const flatRef = doc(
+            db,
+            "Societies",
+            societyName,
+            `${societyName} wings`,
+            wing,
+            `${societyName} floors`,
+            floorName,
+            `${societyName} flats`,
+            flatNumber
+          );
+      
+          // Fetch the current flat data
+          const flatSnapshot = await getDoc(flatRef);
+      
+          let currentDetails: UserDetails = {};
+          if (flatSnapshot.exists()) {
+            currentDetails = flatSnapshot.data().userDetails || {};
+          }
+      
+          // Check if the userId exists and update or add new
+          if (currentDetails[userId]) {
+            currentDetails[userId].userStatus = approvalStatus; // Update status
+            currentDetails[userId].userType = userType; // Update userType if needed
+          } else {
+            // Add a new user if userId doesn't exist
+            currentDetails[userId] = {
+              userName,
+              userStatus: approvalStatus,
+              userType,
+            };
+          }
+      
+          // Prepare conditional updates for other fields
+          const updates: any = {
+            userDetails: currentDetails, // Update the userDetails object
+          };
+      
+          if (flatType === "Rent") {
+            if (userType === "Renter") {
+              updates.renterRegisterd = "Pending Approval";
+              updates.memberStatus = "Pending Approval";
+            } else {
+              updates.ownerRegisterd = "Pending Approval";
+            }
+          } else {
+            updates.ownerRegisterd = "Pending Approval";
+            updates.memberStatus = "Pending Approval";
+          }
+      
+          // Update the document fields
+          await updateDoc(flatRef, updates);
+      
+          console.log("Flat document updated successfully with user details");
+        } catch (error) {
+          console.error("Error updating flat details:", error);
+        }
+      };
+
 
 
   if (loading) {
@@ -337,7 +455,7 @@ const joinWing = () => {
       {/* Top Appbar */}
       <Appbar.Header style={styles.header}>
         <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-        <Appbar.Content title="Join Wings" titleStyle={styles.titleStyle} />
+        <Appbar.Content title="Join Wing" titleStyle={styles.titleStyle} />
       </Appbar.Header>
 
       {/* Select Wing */}
@@ -406,9 +524,19 @@ const joinWing = () => {
                   <Pressable
                     style={[styles.button, styles.buttonYes]}
                     onPress={() => {
-                      setUserType("Owner");
-                      setUserTypeModalVisible(false);
-                      setConfirmationModalVisible(true); // Transition to the second modal
+                      const selectedFlatData = flatsData[selectedWing!][selectedFloor!][selectedFlat!];
+                    
+                      // Check if the owner is registered or pending approval
+                      if (selectedFlatData.ownerRegisterd === "Registered") {
+                        Alert.alert("Already Registered", "This unit Owner is already registered.");
+                      } else if (selectedFlatData.ownerRegisterd === "Pending Approval") {
+                        Alert.alert("Pending Approval", "The registration of this unit Owner is still under approval.");
+                      } else {
+                        // If neither condition is met, proceed with setting user type and showing the next modal
+                        setUserType("Owner");
+                        setUserTypeModalVisible(false);
+                        setConfirmationModalVisible(true); // Transition to the second modal
+                      }
                     }}
                   >
                     <Text style={styles.buttonText}>Owner</Text>
@@ -416,9 +544,14 @@ const joinWing = () => {
                   <Pressable
                     style={[styles.button, styles.buttonNo]}
                     onPress={() => {
-                      setUserType("Renter");
-                      setUserTypeModalVisible(false);
-                      setConfirmationModalVisible(true); // Transition to the second modal
+                      const selectedFlatData = flatsData[selectedWing!][selectedFloor!][selectedFlat!];
+                      if (selectedFlatData.ownerRegisterd !== "Registered") {
+                        Alert.alert("Owner Should Register First", "The owner of this unit must register before proceeding.");
+                      } else {
+                        setUserType("Renter");
+                        setUserTypeModalVisible(false);
+                        setConfirmationModalVisible(true); // Transition to the second modal
+                      }
                     }}
                   >
                     <Text style={styles.buttonText}>Renter</Text>

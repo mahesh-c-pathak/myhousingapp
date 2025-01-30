@@ -3,12 +3,17 @@ import { View, StyleSheet, Text, FlatList, TouchableOpacity, ActivityIndicator }
 import { TextInput, Button } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { db } from "../../../FirebaseConfig";
-import { doc, getDoc, setDoc, collection, addDoc, getDocs,deleteDoc  } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, getDocs,deleteDoc,query, writeBatch } from 'firebase/firestore';
 
 const WingScreen: React.FC = () => {
   const { Wing, societyName } = useLocalSearchParams(); // Retrieves wing name from the route params
   const sanitizedWing = (Wing as string).trim(); // Sanitize the wing name
   const wingLetter = sanitizedWing.split('-').pop(); // Extracts the wing identifier (e.g., 'A' from 'Wing-A')
+
+  const customWingsSubcollectionName = `${societyName} wings`;
+  const customFloorsSubcollectionName = `${societyName} floors`;
+  const customFlatsSubcollectionName = `${societyName} flats`; 
+  const customFlatsBillsSubcollectionName = `${societyName} bills`;
 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -73,44 +78,118 @@ const WingScreen: React.FC = () => {
     return result;
   };
 
+  const userWingUpdate = async (
+    societyname: string,
+    wingname: string
+  ) => {
+    
+  
+    try {
+      // Step 1: Query all users
+      const usersQuery = query(collection(db, "users"));
+      const usersSnap = await getDocs(usersQuery);
+      console.log('societyname in user wing update', societyname)
+      console.log('wingname in user wing update', wingname)
+  
+      if (usersSnap.empty) {
+        console.log("No users found in the database.");
+        return;
+      }
+  
+      // Step 2: Iterate through each user and update their data
+      const batch = writeBatch(db); // Use a batch to optimize multiple updates
+  
+      usersSnap.forEach((userDoc) => {
+        const userData = userDoc.data();
+        const mySociety = userData.mySociety || [];
+  
+        const societyIndex = mySociety.findIndex(
+          (society: any) => Object.keys(society)[0] === societyname
+        );
+  
+        if (societyIndex !== -1) {
+          const societyData = mySociety[societyIndex][societyname];
+  
+          if (societyData?.myWing?.[wingname]) {
+            // Remove the specified wing
+            const updatedMyWing = { ...societyData.myWing };
+            delete updatedMyWing[wingname];
+  
+            const updatedSocietyData = {
+              ...societyData,
+              myWing: updatedMyWing,
+            };
+  
+            const updatedMySociety = [...mySociety];
+            updatedMySociety[societyIndex] = { [societyname]: updatedSocietyData };
+  
+            // Add the update to the batch
+            batch.update(doc(db, "users", userDoc.id), {
+              mySociety: updatedMySociety,
+            });
+  
+            console.log(`Wing "${wingname}" removed for user "${userDoc.id}".`);
+          }
+        }
+      });
+  
+      // Commit the batch
+      await batch.commit();
+      console.log(`Wing "${wingname}" removed successfully for all users.`);
+    } catch (error) {
+      console.error("Error updating user data:", error);
+    } 
+  };
+  
+
   const handleNext = async () => {
     if (totalFloors && unitsPerFloor && selectedFormat !== null) {
       try {
-        const docRef = doc(db, 'Societies', societyName as string);
+        setLoading(true);
+  
+        const docRef = doc(db, "Societies", societyName as string);
         const docSnap = await getDoc(docRef);
   
         if (!docSnap.exists()) {
-          alert('Society does not exist!');
+          alert("Society does not exist!");
           return;
         }
-        setLoading(true);
   
-        const wingRef = doc(docRef, 'wings', wingLetter as string);
-  
-        // Delete old floors and flats in the wing
-        const floorsRef = collection(wingRef, 'floors');
+        const wingRef = doc(docRef, customWingsSubcollectionName, wingLetter as string);
+        const floorsRef = collection(wingRef, customFloorsSubcollectionName);
         const floorsSnap = await getDocs(floorsRef);
   
-        for (const floorDoc of floorsSnap.docs) {
-          const flatsRef = collection(floorsRef, floorDoc.id, 'flats');
-          const flatsSnap = await getDocs(flatsRef);
+        if (!floorsSnap.empty) {
+          console.log(`Floors collection exists. Proceeding with Step 1 and Step 2...`);
   
-          // Delete all flats under the floor
-          for (const flatDoc of flatsSnap.docs) {
-            const billsRef = collection(flatsRef, flatDoc.id, 'bills');
-            const billsSnap = await getDocs(billsRef);
+          // Step 1: Call userWingUpdate before deleting old floors and flats
+          await userWingUpdate(societyName as string, wingLetter as string);
   
-            // Delete all bills under the flat
-            for (const billDoc of billsSnap.docs) {
-              await deleteDoc(doc(billsRef, billDoc.id));
+          // Step 2: Delete old floors and flats in the wing
+          for (const floorDoc of floorsSnap.docs) {
+            const flatsRef = collection(floorsRef, floorDoc.id, customFlatsSubcollectionName);
+            const flatsSnap = await getDocs(flatsRef);
+  
+            // Delete all flats under the floor
+            for (const flatDoc of flatsSnap.docs) {
+              const billsRef = collection(flatsRef, flatDoc.id, customFlatsBillsSubcollectionName);
+              const billsSnap = await getDocs(billsRef);
+  
+              // Delete all bills under the flat
+              for (const billDoc of billsSnap.docs) {
+                await deleteDoc(doc(billsRef, billDoc.id));
+              }
+  
+              await deleteDoc(doc(flatsRef, flatDoc.id)); // Delete flat document
             }
   
-            await deleteDoc(doc(flatsRef, flatDoc.id)); // Delete flat document
+            await deleteDoc(doc(floorsRef, floorDoc.id)); // Delete floor document
           }
-  
-          await deleteDoc(doc(floorsRef, floorDoc.id)); // Delete floor document
+        } else {
+          console.log("Floors collection does not exist. Skipping Step 1 and Step 2.");
         }
   
+        // Step 3: Generate floor numbers and save new data
         const floorWiseNumbers = generateFloorWiseNumbers();
         if (!floorWiseNumbers) return;
   
@@ -125,47 +204,47 @@ const WingScreen: React.FC = () => {
   
         // Add new floors and flats
         for (const floorName in floorWiseNumbers) {
-          const floorRef = doc(wingRef, 'floors', floorName);
+          const floorRef = doc(wingRef, customFloorsSubcollectionName, floorName);
           await setDoc(floorRef, {
-            floorNumber: parseInt(floorName.replace('Floor ', '')),
+            floorNumber: parseInt(floorName.replace("Floor ", "")),
           });
   
-          const flatsRef = collection(floorRef, 'flats');
+          const flatsRef = collection(floorRef, customFlatsSubcollectionName);
           floorWiseNumbers[floorName].forEach(async (flatNumber) => {
             const flatRef = doc(flatsRef, flatNumber);
-
-            // Construct the flatreference string
+  
+            // Construct the flat reference string
             const flatReference = `${Wing}-${floorName}-${flatNumber}`;
-
+  
             await setDoc(flatRef, {
-              resident: 'owner',
-              flatType: 'owner',
-              flatreference: flatReference
+              resident: "owner",
+              flatType: "owner",
+              flatreference: flatReference,
+              memberStatus: "Notregistered",
+              ownerRegisterd: "Notregistered",
             });
   
-            const billsRef = collection(flatRef, 'bills');
-            await addDoc(billsRef, {
-              amount: 0,
-            });
           });
         }
   
         alert(`Data for Wing ${Wing} saved successfully!`);
   
         router.push({
-          pathname: '/WingSetupScreen',
+          pathname: "/WingSetupScreen",
           params: { Wing: wingLetter, societyName },
         });
       } catch (error) {
-        console.error('Error saving data:', error);
-        alert('Failed to save data. Please try again.');
+        console.error("Error saving data:", error);
+        alert("Failed to save data. Please try again.");
       } finally {
         setLoading(false);
       }
     } else {
-      alert('Please fill all fields and select a format!');
-    } 
+      alert("Please fill all fields and select a format!");
+    }
   };
+  
+  
 
   if (loading) {
     return (

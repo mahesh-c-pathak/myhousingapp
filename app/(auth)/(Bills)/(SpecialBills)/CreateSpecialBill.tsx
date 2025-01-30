@@ -86,7 +86,7 @@ const CreateSpecialBill = () => {
     { floor: string; label: string; value: string }[]
   >([]);
   
-
+ 
   useEffect(() => {
     const loadMembers = async () => {
       try {
@@ -127,7 +127,10 @@ const CreateSpecialBill = () => {
 
   useEffect(() => {
     // Format the data as desired
-    const newData = selectedfetchedMembers.map((item) => `${item.floor} ${item.label}`);
+    // const newData = selectedfetchedMembers.map((item) => `${item.floor} ${item.label}`);
+    const newData = selectedfetchedMembers.map(
+      (item) => `${item.floor}-${item.label.split(" ").join("-")}`
+    );
     setFormattedMembersData(newData);
   }, [selectedfetchedMembers]);
 
@@ -242,7 +245,7 @@ const CreateSpecialBill = () => {
    members:formattedMembersData.join(", "),
    items: JSON.stringify(billItems),
  };
-
+ 
  // Navigate to the next screen
  router.push({
    pathname: "/NextScreenSpecial",

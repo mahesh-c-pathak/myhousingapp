@@ -38,10 +38,15 @@ const WingSetupScreen: React.FC = () => {
   const screenWidth = useWindowDimensions().width;
   const router = useRouter(); // Expo router for navigation
 
+  const customWingsSubcollectionName = `${societyName} wings`;
+  const customFloorsSubcollectionName = `${societyName} floors`;
+  const customFlatsSubcollectionName = `${societyName} flats`;
+  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+
   useEffect(() => {
     const fetchWingData = async () => {
       try {
-        const wingRef = doc(db, 'Societies', societyName as string, 'wings', Wing as string);
+        const wingRef = doc(db, 'Societies', societyName as string, customWingsSubcollectionName, Wing as string);
         const wingSnap = await getDoc(wingRef);
 
         if (!wingSnap.exists()) {
@@ -49,7 +54,7 @@ const WingSetupScreen: React.FC = () => {
           return;
         }
 
-        const floorsRef = collection(wingRef, 'floors');
+        const floorsRef = collection(wingRef, customFloorsSubcollectionName);
         const floorSnaps = await getDocs(floorsRef);
 
         if (floorSnaps.empty) {
@@ -59,7 +64,7 @@ const WingSetupScreen: React.FC = () => {
 
         const fetchedFloorData: Record<string, FloorData> = {};
         for (const floorDoc of floorSnaps.docs) {
-          const flatsRef = collection(floorDoc.ref, 'flats');
+          const flatsRef = collection(floorDoc.ref, customFlatsSubcollectionName);
           const flatSnaps = await getDocs(flatsRef);
 
           const flatData: FloorData = {};
@@ -195,15 +200,19 @@ const WingSetupScreen: React.FC = () => {
                     db,
                     'Societies',
                     societyName as string,
-                    'wings',
+                    customWingsSubcollectionName,
                     Wing as string,
-                    'floors',
+                    customFloorsSubcollectionName,
                     floor,
-                    'flats',
+                    customFlatsSubcollectionName,
                     flatNumber
                   );
-  
-                  await updateDoc(flatRef, { flatType: newType });
+
+                  // Determine the resident value based on flatType
+                  const resident = newType === "Rent" ? "Renter" : "Owner";
+                  const renterRegisterd = newType === "Rent" ? "Notregistered" : "NA";
+   
+                  await updateDoc(flatRef, { flatType: newType, resident: resident, renterRegisterd:renterRegisterd });
                 }
                 // After all updates, navigate to SetupWingsScreen
                 router.push({

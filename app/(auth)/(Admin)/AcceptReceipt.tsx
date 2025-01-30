@@ -1,22 +1,27 @@
 import { StyleSheet, Text, View, Alert, TouchableOpacity } from 'react-native'
 import React, { useState, useEffect } from "react";
-import { Dropdown } from 'react-native-paper-dropdown';
+// import { Dropdown } from 'react-native-paper-dropdown';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, updateDoc, setDoc } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
 import { Appbar, Button, Switch, Menu, TextInput } from "react-native-paper";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+
 import { useSociety } from "../../../utils/SocietyContext";
 
 import { generateVoucherNumber } from "../../../utils/generateVoucherNumber";
 import { updateLedger } from "../../../utils/updateLedger";
 import { getBillItemsLedger } from "../../../utils/getBillItemsLedger";
+import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
+import PaymentDatePicker from "@/utils/paymentDate";
+
+import Dropdown from "@/utils/DropDown";
+import { updateFlatCurrentBalance } from "@/utils/updateFlatCurrentBalance"; // Adjust path as needed
 
 const AcceptReceipt = () => {
   const router = useRouter();
   const { societyName } = useSociety();
 
-  const { wing,floorName,flatNumber, amount,  transactionId, paymentMode, notes, receiptImage, selectedIds } = useLocalSearchParams();
+  const { wing,floorName,flatNumber, amount,  transactionId, paymentMode, notes, receiptImage, selectedIds, bankName, chequeNo } = useLocalSearchParams();
 
    
   const params = useLocalSearchParams();
@@ -25,35 +30,33 @@ const AcceptReceipt = () => {
   const [billSettlement, setBillSettlement] = useState(false);
   
   const [ledgerAccount, setledgerAccount] = useState<any>('');
-  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string }[]>([]);
+
+   const [accountToOptions, setAccountToOptions] = useState<{ label: string; value: string; group: string }[]>([]);
+   const [groupTo, setGroupTo] = useState<string>("");
+
+   const [asOnDate, setAsOnDate] = useState<Date>(new Date());
+
+   const parsedSelectedIds = typeof selectedIds === "string" ? JSON.parse(selectedIds) : selectedIds;
+   const customWingsSubcollectionName = `${societyName} wings`;
+    const customFloorsSubcollectionName = `${societyName} floors`;
+    const customFlatsSubcollectionName = `${societyName} flats`;
+    const customFlatsBillsSubcollectionName = `${societyName} bills`;
+
+    const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`
 
 
-
-    // Example useEffect to fetch and format options
-    useEffect(() => {
-      const fetchAccountOptions = async () => {
-        try {
-          const ledgerGroupsRef = collection(db, 'ledgerGroups');
-
-          const fromQuerySnapshot = await getDocs(
-            query(ledgerGroupsRef, where('name', 'in', ['Bank Accounts', 'Cash in Hand']))
-          );
-
-          const fromAccounts = fromQuerySnapshot.docs
-            .map((doc) => doc.data().accounts || [])
-            .flat()
-            .filter((account) => account.trim() !== '')
-            .map((account) => ({ label: account, value: account })); // Format for Dropdown
-
-          setAccountFromOptions(fromAccounts);
-        } catch (error) {
-          console.error('Error fetching account options:', error);
-          Alert.alert('Error', 'Failed to fetch account options.');
-        }
-      };
-
-      fetchAccountOptions();
-    }, []);
+    // fetch Paid To List
+      useEffect(() => {
+        const fetchbankCashOptions = async () => {
+          try {
+            const { accountFromOptions } = await fetchbankCashAccountOptions(societyName);
+            setAccountToOptions(accountFromOptions);
+          } catch (error) {
+            Alert.alert("Error", "Failed to fetch bank Cash account options.");
+          }
+        };
+        fetchbankCashOptions();
+      }, [params?.id]);
 
     // Payment Date State
 
@@ -70,17 +73,182 @@ const AcceptReceipt = () => {
     const [showDatePicker, setShowDatePicker] = useState(false);
 
     // Handle Date Picker Change
-    const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-      if (selectedDate) {
-        setPaymentDate(selectedDate);
-        setFormattedDate(formatDate(selectedDate));
-      }
-      setShowDatePicker(false);
+    const handleDateChange = (newDate: Date) => {
+      setAsOnDate(newDate);
+      setFormattedDate(formatDate(newDate));
     };
 
     // save the data 
-
     const handleAccept = async () => {
+      try {
+        // Check if a ledger account is selected
+        if (!ledgerAccount) {
+          Alert.alert("Error", "Please select a ledger account.");
+          return;
+        }
+    
+        // Parse and validate receiptAmount
+        const receiptAmountValue = parseFloat(receiptAmount as string);
+        if (isNaN(receiptAmountValue) || receiptAmountValue <= 0) {
+          Alert.alert("Error", "Invalid receipt amount. Please enter a valid number.");
+          return;
+        }
+    
+        const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
+        const flatDocRef = doc(db, flatRef);
+        const flatDocSnap = await getDoc(flatDocRef);
+                          
+        if (!flatDocSnap.exists()) {
+          console.warn(`Flat Data Not Exisits.`);
+          return;
+          
+        }
+          
+      const flatDetails = flatDocSnap.data();
+      const residentType = flatDetails.resident;
+
+
+        const billsCollectionRef = collection(flatDocRef, customFlatsBillsSubcollectionName);
+        const parsedSelectedIds = selectedIds ? JSON.parse(selectedIds as string) : [];
+    
+        if (Array.isArray(parsedSelectedIds) && parsedSelectedIds.length > 0) {
+          let remainingReceiptValue = receiptAmountValue; // Track remaining receiptAmount globally
+          const billreceiptVoucherNumber = await generateVoucherNumber(); // Generate  voucher for bill receipt
+    
+          for (const item of parsedSelectedIds) {
+            const billDocRef = doc(billsCollectionRef, item);
+            const billDoc = await getDoc(billDocRef);
+    
+            if (billDoc.exists()) {
+              console.log("Bill Document:", billDoc.data());
+              const billData = billDoc.data();
+              const billAmount = billData.amount;
+              const balanceToApply = Math.min(billAmount, remainingReceiptValue);
+    
+              // Deduct from bill amount
+              billData.amount -= balanceToApply;
+              remainingReceiptValue -= balanceToApply;
+    
+              // Update bill status
+              const billStatus = billData.amount === 0 ? "paid" : "unpaid";
+    
+              // Update the document
+              await updateDoc(billDocRef, {
+                status: billStatus,
+                receiptAmount: billAmount,
+                paymentDate: formattedDate, // Save formatted date
+                paymentMode: paymentMode || "Other", // Add payment mode
+                bankName: bankName || null, // Include bank name if applicable
+                chequeNo: chequeNo || null, // Include cheque number if applicable
+                transactionId,
+                voucherNumber:billreceiptVoucherNumber,
+                type: "Bill Settelment",
+                origin:"Bill Settelment",
+                note,
+              });
+    
+              console.log(`Updated bill document with ID: ${item}`);
+              // Mahesh Entered
+
+                // Call the function to get bill details
+                const billItemLedger = await getBillItemsLedger(societyName,item, residentType );
+
+                // Process each item: log details and update ledger
+                for (const {  updatedLedgerAccount, ledgerAccount, groupFrom,amount, invoiceDate  } of billItemLedger) {
+                  // Update ledger
+                  const ledgerUpdate = await updateLedger(societyName,"Account Receivable",updatedLedgerAccount, amount, "Subtract", formattedDate);
+                  console.log(`  Ledger Update Status: ${ledgerUpdate}`);
+                }
+
+          // Mahesh End
+
+            } else {
+              console.log(`Bill document with ID: ${item} does not exist`);
+            }
+          }
+    
+          // If all bills are cleared, update uncleared balance status to "Cleared"
+          if (remainingReceiptValue === 0) {
+            const unclearedBalanceDocRef = doc(db, flatRef, unclearedBalanceSubcollectionName, transactionId as string);
+            const docSnap = await getDoc(unclearedBalanceDocRef);
+    
+            if (docSnap.exists()) {
+              await updateDoc(unclearedBalanceDocRef, { 
+                status: "Cleared",
+                amountReceived: receiptAmountValue,
+                paymentReceivedDate: formattedDate, // Save formatted date, 
+                ledgerAccount,
+                note,
+                voucherNumber:billreceiptVoucherNumber,
+                origin:"Bill Settelment",
+              });
+              console.log(`Uncleared balance with ID: ${transactionId} updated to 'Cleared'`);
+            } else {
+              console.log(`Uncleared balance document with ID: ${transactionId} does not exist`);
+            }
+          }
+
+          const LedgerUpdate = await updateLedger(societyName,groupTo,ledgerAccount, parseFloat(receiptAmount as string), "Add", formattedDate ); // Update Ledger
+
+          console.log(LedgerUpdate)
+          
+        } else{
+            console.log("No selected IDs or logic unchanged. parsedSelectedIds length is 0");
+            // Existing logic for current balance without updating bills
+            const receiptValue = parseFloat(receiptAmount as string);
+            if (!isNaN(receiptValue)) {
+              const memberAdvanceVoucherNumber = await generateVoucherNumber(); // Generate separate voucher for receipt
+              // Update  advance entry
+              const unclearedBalanceDocRef = doc(db, flatRef, unclearedBalanceSubcollectionName, transactionId as string);
+              const docSnap = await getDoc(unclearedBalanceDocRef);
+      
+              if (docSnap.exists()) {
+                await updateDoc(unclearedBalanceDocRef, { 
+                  status: "Cleared",
+                  amountReceived: receiptValue,
+                  paymentReceivedDate: formattedDate, // Save formatted date,
+                  ledgerAccount, 
+                  note,
+                  voucherNumber:memberAdvanceVoucherNumber,
+                  isDeposit:false,
+                  origin:"Member entered Advance",
+                  type: "Advance",
+                  
+                });
+              }
+
+              // Logic to save Advance Entry and Update Current Balance for the Flat
+
+              try {
+                 const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`
+                const currentbalanceCollectionRef = collection(db, flatRef, currentBalanceSubcollectionName);
+            
+                const result = await updateFlatCurrentBalance(currentbalanceCollectionRef, parseFloat(receiptAmount as string), "Add", formattedDate);
+            
+                console.log("Balance update result:", result);
+              } catch (error) {
+                console.error("Failed to update balance:", error);
+              }
+
+
+              // Update Ledger
+              const LedgerUpdate = await updateLedger(societyName,groupTo,ledgerAccount, parseFloat(receiptAmount as string), "Add", formattedDate ); // Update Ledger
+              console.log(LedgerUpdate)
+              const LedgerUpdate2 = await updateLedger(societyName,"Current Liabilities","Members Advanced", parseFloat(amount as string), "Add", formattedDate ); // Update Ledger
+              console.log(LedgerUpdate2)
+            } else {
+              console.error("Invalid receiptAmount, unable to update currentBalance.");
+            }
+        }
+      } catch (error) {
+        console.error("Error in handleAccept:", error);
+        Alert.alert("Error", "Something went wrong. Please try again.");
+      }
+    };
+    
+    
+ 
+    const handleAcceptOld = async () => {
       try {
         // Check if a ledger account is selected
         if (!ledgerAccount) {
@@ -151,12 +319,12 @@ const AcceptReceipt = () => {
                 // Mahesh Entered
 
                 // Call the function to get bill details
-                const billItemLedger = await getBillItemsLedger(normalizedBillId, relevantFlatData.resident );
+                const billItemLedger = await getBillItemsLedger(societyName,normalizedBillId, relevantFlatData.resident );
 
                 // Process each item: log details and update ledger
-                for (const { updatedLedgerAccount, amount } of billItemLedger) {
+                for (const {  updatedLedgerAccount, ledgerAccount, groupFrom,amount, invoiceDate  } of billItemLedger) {
                   // Update ledger
-                  const ledgerUpdate = await updateLedger(updatedLedgerAccount, amount, "Subtract");
+                  const ledgerUpdate = await updateLedger(societyName,"Account Receivable",updatedLedgerAccount, amount, "Subtract", invoiceDate);
                   console.log(`  Ledger Update Status: ${ledgerUpdate}`);
                 }
 
@@ -326,7 +494,7 @@ const AcceptReceipt = () => {
           // Save the updated data back to Firestore
           await setDoc(societiesDocRef, updatedSocietyData);
           
-          const LedgerUpdate = await updateLedger(ledgerAccount, parseFloat(receiptAmount as string), "Add" ); // Update Ledger
+          const LedgerUpdate = await updateLedger(societyName,groupTo,ledgerAccount, parseFloat(receiptAmount as string), "Add", formattedDate ); // Update Ledger
 
           console.log(LedgerUpdate)
     
@@ -379,40 +547,39 @@ const AcceptReceipt = () => {
         </View>
 
         {/* Ledger Account */}
-        <View >
-          <Text style={styles.label}>Ledger Account</Text>
-            <Dropdown
-              label="Account"
-              placeholder="Select Account"
-              options={accountFromOptions}
-              value={ledgerAccount}
-              onSelect={setledgerAccount}
-            />
-        </View>
-            {/* Payment Date */}
-        <View> 
-            <Text style={styles.label}>Payment Date</Text>
-            <TouchableOpacity
-              onPress={() => setShowDatePicker(true)}
-              style={styles.dateInputContainer}
-            >
-              <TextInput
-                style={styles.dateInput}
-                value={formattedDate}
-                editable={false}
-              />
-              <Text style={styles.calendarIcon}>📅</Text>
-            </TouchableOpacity>
+                              <View style={styles.section}>
+                                <Text style={styles.label}>Ledger Account</Text>
+                                <Dropdown
+                                  data={accountToOptions.map((option) => ({
+                                    label: option.label,
+                                    value: option.value,
+                                  }))}
+                                  onChange={(selectedValue) => {
+                                    setledgerAccount(selectedValue);
+                
+                                    // Find the selected account to get its group
+                                    const selectedOption = accountToOptions.find(
+                                      (option) => option.value === selectedValue
+                                    );
+                                    if (selectedOption) {
+                                      setGroupTo(selectedOption.group); // Set the group name
+                                    }
+                                  }}
+                                  placeholder="Select Account"
+                                  initialValue={ledgerAccount}
+                                />
+                              </View>
+              {/* Transaction Date */}
+              <View style={styles.section}>
+                              <Text style={styles.label}>Transaction Date</Text>
+                              <PaymentDatePicker
+                                initialDate={asOnDate}
+                                onDateChange={handleDateChange}
+                              />
+                            </View>
 
-            {showDatePicker && (
-              <DateTimePicker
-                value={paymentDate}
-                mode="date"
-                display="default"
-                onChange={handleDateChange}
-              />
-            )}
-        </View>
+
+           
           {/* Note */}
             <Text style={styles.label}>Note (optional)</Text>
             <TextInput
@@ -453,6 +620,7 @@ export default AcceptReceipt
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   header: { backgroundColor: "#2196F3" },
+  section: { marginBottom: 10 },
   label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
   input: {borderWidth: 1, borderColor: "#CCC", borderRadius: 4, padding: 10, marginVertical: 8,},
   modalContainer: { backgroundColor: "#FFF", width: "90%", borderRadius: 8, padding: 16 },

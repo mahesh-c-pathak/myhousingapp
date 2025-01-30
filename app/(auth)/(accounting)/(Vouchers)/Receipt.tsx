@@ -13,7 +13,6 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { updateLedger } from "../../../../utils/updateLedger";
 import { useSociety } from "../../../../utils/SocietyContext";
 import { generateVoucherNumber } from "../../../../utils/generateVoucherNumber";
@@ -25,6 +24,8 @@ import Dropdown from "../../../../utils/DropDown";
 import PaymentDatePicker from "../../../../utils/paymentDate";
 
 const ReceiptScreen: React.FC = () => {
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
   const router = useRouter();
   const params = useLocalSearchParams();
   const isEditMode = !!params?.id;
@@ -41,10 +42,6 @@ const ReceiptScreen: React.FC = () => {
   const [customVoucher, setCustomVoucher] = useState<string>("");
   const [paymentNote, setPaymentNote] = useState<string>("");
   const [asOnDate, setAsOnDate] = useState<Date>(new Date());
-  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
-
-  const [menuFromVisible, setMenuFromVisible] = useState<boolean>(false);
-  const [menuToVisible, setMenuToVisible] = useState<boolean>(false);
 
   const [loading, setLoading] = useState(false);
     
@@ -71,7 +68,7 @@ const ReceiptScreen: React.FC = () => {
     useEffect(() => {
       const fetchOptions = async () => {
         try {
-          const { accountOptions } = await fetchAccountList(receiptFromToGroupsList);
+          const { accountOptions } = await fetchAccountList(societyName, receiptFromToGroupsList);
           setAccountFromOptions(accountOptions);
           setAccountToOptions(accountOptions);
         } catch (error) {
@@ -86,7 +83,7 @@ const ReceiptScreen: React.FC = () => {
     const fetchTransactionDetails = async () => {
       if (isEditMode && params?.id) {
         try {
-          const docRef = doc(db, "Transaction", params.id as string);
+          const docRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -158,7 +155,7 @@ const ReceiptScreen: React.FC = () => {
   
       if (isEditMode && params?.id) {
         // Update existing transaction
-        const transactionRef = doc(db, "Transaction", params.id as string);
+        const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
         const transactionDoc = await getDoc(transactionRef);
         if (!transactionDoc.exists()) {
           Alert.alert("Error", "Transaction not found.");
@@ -178,6 +175,7 @@ const ReceiptScreen: React.FC = () => {
         // Ledger updates based on changes
         // Revert original ledger updates
         await updateLedger(
+          societyName,
           originalGroupTo,
           originalPaidTo,
           originalAmount,
@@ -185,6 +183,7 @@ const ReceiptScreen: React.FC = () => {
           originalTransactionDate
         );
         await updateLedger(
+          societyName,
           originalGroupFrom,
           originalPaidFrom,
           originalAmount,
@@ -194,6 +193,7 @@ const ReceiptScreen: React.FC = () => {
 
         // Apply new ledger updates
           await updateLedger(
+            societyName,
             groupTo,
             paidTo,
             parsedAmount,
@@ -201,6 +201,7 @@ const ReceiptScreen: React.FC = () => {
             formattedDate
           );
           await updateLedger(
+            societyName,
             groupFrom,
             paidFrom,
             parsedAmount,
@@ -221,10 +222,11 @@ const ReceiptScreen: React.FC = () => {
         // Generate voucher number and create new transaction
         const voucher = await generateVoucherNumber();
         transaction.voucher = voucher;
-        await addDoc(collection(db, "Transaction"), transaction);
+        await addDoc(collection(db, "Societies", societyName, transactionCollectionName), transaction);
 
         // Update ledger
         await updateLedger(
+          societyName,
           groupTo,
           paidTo,
           parsedAmount,
@@ -232,6 +234,7 @@ const ReceiptScreen: React.FC = () => {
           formattedDate
         );
         await updateLedger(
+          societyName,
           groupFrom,
           paidFrom, 
           parsedAmount,

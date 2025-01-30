@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { db } from "../../../FirebaseConfig";
@@ -8,6 +8,11 @@ import { MaterialIcons } from "@expo/vector-icons"; // Import icon library
 
 const SetupWingsScreen: React.FC = () => {
   const { societyName: localName } = useLocalSearchParams() as {societyName: string }; // Society name
+
+  const customWingsSubcollectionName = `${localName} wings`;
+  const customFloorsSubcollectionName = `${localName} floors`;
+  const customFlatsSubcollectionName = `${localName} flats`;
+  const customFlatsBillsSubcollectionName = `${localName} bills`;
 
   const router = useRouter();
 
@@ -24,7 +29,7 @@ const SetupWingsScreen: React.FC = () => {
       }
     
       try {
-        const wingsCollectionRef = collection(db, "Societies", localName, "wings");
+        const wingsCollectionRef = collection(db, "Societies", localName, customWingsSubcollectionName);
         const wingsSnapshot = await getDocs(wingsCollectionRef);
     
         if (!wingsSnapshot.empty) {
@@ -42,9 +47,9 @@ const SetupWingsScreen: React.FC = () => {
                 db,
                 "Societies",
                 localName,
-                "wings",
+                customWingsSubcollectionName,
                 wingKey,
-                "floors"
+                customFloorsSubcollectionName
               );
     
               // Check if the floors collection exists and has documents
@@ -140,8 +145,25 @@ const SetupWingsScreen: React.FC = () => {
       </View>
     );
   }
+  const allWingsSetUp = wings && Object.keys(wings).length === alreadySetupWings.length;
 
-  return <View style={styles.container}>{generateCards()}</View>;
+  return (
+    <View style={styles.container}>
+      {generateCards()}
+      {allWingsSetUp && (
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() =>
+            router.push({
+              pathname: "/(auth)/startPage",
+            })
+          }
+        >
+          <Text style={styles.buttonText}>Proceed to Home Screen</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
@@ -169,6 +191,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#d32f2f',
   },
+  button: {
+    backgroundColor: '#5e35b1',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
 
 export default SetupWingsScreen;
+ 

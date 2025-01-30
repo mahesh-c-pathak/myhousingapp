@@ -3,22 +3,25 @@ import { ScrollView, StyleSheet, Alert, Text, Platform, View, FlatList } from "r
 import { TextInput, Button, Card, Menu, Appbar, ActivityIndicator } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc } from "firebase/firestore";
-import { db } from "../../../../FirebaseConfig";
+import { db } from "@/FirebaseConfig";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { updateLedger } from "../../../../utils/updateLedger";
-import { generateVoucherNumber } from "../../../../utils/generateVoucherNumber";
-import { incomeFromGroupsList } from '../../../../components/LedgerGroupList'; // Import the array
-import { fetchbankCashAccountOptions } from "../../../../utils/bankCashOptionsFetcher";
-import { fetchAccountList } from "../../../../utils/acountFetcher";
-import CustomButton from '../../../../components/CustomButton';
-import CustomInput from '../../../../components/CustomInput';
-import Dropdown from "../../../../utils/DropDown";
-import PaymentDatePicker from "../../../../utils/paymentDate";
+import { updateLedger } from "@/utils/updateLedger";
+import { generateVoucherNumber } from "@/utils/generateVoucherNumber";
+import { incomeFromGroupsList } from '@/components/LedgerGroupList'; // Import the array
+import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
+import { fetchAccountList } from "@/utils/acountFetcher";
+import CustomButton from '@/components/CustomButton';
+import CustomInput from '@/components/CustomInput';
+import Dropdown from "@/utils/DropDown";
+import PaymentDatePicker from "@/utils/paymentDate";
+import { useSociety } from "@/utils/SocietyContext";
 
 const IncomeScreen: React.FC = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
   const isEditMode = !!params?.id;
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
 
   const [paidFrom, setPaidFrom] = useState<string>("");
   const [paidTo, setPaidTo] = useState<string>("");
@@ -56,7 +59,7 @@ const IncomeScreen: React.FC = () => {
     useEffect(() => {
       const fetchOptions = async () => {
         try {
-          const { accountOptions } = await fetchAccountList(incomeFromGroupsList);
+          const { accountOptions } = await fetchAccountList(societyName, incomeFromGroupsList);
           setAccountFromOptions(accountOptions);
         } catch (error) {
           Alert.alert("Error", "Failed to fetch account options.");
@@ -69,7 +72,7 @@ const IncomeScreen: React.FC = () => {
   useEffect(() => {
     const fetchbankCashOptions = async () => {
       try {
-        const { accountFromOptions } = await fetchbankCashAccountOptions();
+        const { accountFromOptions } = await fetchbankCashAccountOptions(societyName);
         setAccountToOptions(accountFromOptions);
       } catch (error) {
         Alert.alert("Error", "Failed to fetch bank Cash account options.");
@@ -82,7 +85,7 @@ const IncomeScreen: React.FC = () => {
     const fetchTransactionDetails = async () => {
       if (isEditMode && params?.id) {
         try {
-          const docRef = doc(db, "Transaction", params.id as string);
+          const docRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -155,7 +158,7 @@ const IncomeScreen: React.FC = () => {
 
       if (isEditMode && params?.id) {
         // Update existing transaction
-        const transactionRef = doc(db, "Transaction", params.id as string);
+        const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
 
         const transactionDoc = await getDoc(transactionRef);
         if (!transactionDoc.exists()) {
@@ -175,6 +178,7 @@ const IncomeScreen: React.FC = () => {
 
         // Revert original ledger updates
           await updateLedger(
+            societyName,
             originalGroupTo,
             originalPaidTo,
             originalAmount,
@@ -183,6 +187,7 @@ const IncomeScreen: React.FC = () => {
           );
 
           await updateLedger(
+            societyName,
             originalGroupFrom,
             originalPaidFrom,
             originalAmount,
@@ -192,8 +197,8 @@ const IncomeScreen: React.FC = () => {
         
         
           // Apply new ledger updates
-          await updateLedger( groupTo, paidTo, parsedAmount, "Add",formattedDate);
-          await updateLedger( groupFrom, paidFrom, parsedAmount, "Add", formattedDate);
+          await updateLedger(societyName, groupTo, paidTo, parsedAmount, "Add",formattedDate);
+          await updateLedger(societyName, groupFrom, paidFrom, parsedAmount, "Add", formattedDate);
 
 
 
@@ -208,12 +213,12 @@ const IncomeScreen: React.FC = () => {
         const voucher = await generateVoucherNumber();
         transaction.voucher = voucher;
 
-        await addDoc(collection(db, "Transaction"), transaction);
+        await addDoc(collection(db, "Societies", societyName, transactionCollectionName), transaction);
 
         // Update ledger        
         const updatePromises = [];
-        const LedgerUpdate1 = await updateLedger(groupFrom,paidFrom, parsedAmount, "Add", formattedDate ); // Update Ledger
-        const LedgerUpdate2 = await updateLedger(groupTo, paidTo, parsedAmount, "Add", formattedDate ); // Update Ledger
+        const LedgerUpdate1 = await updateLedger(societyName, groupFrom,paidFrom, parsedAmount, "Add", formattedDate ); // Update Ledger
+        const LedgerUpdate2 = await updateLedger(societyName,groupTo, paidTo, parsedAmount, "Add", formattedDate ); // Update Ledger
         updatePromises.push(
           LedgerUpdate1, LedgerUpdate2
         );

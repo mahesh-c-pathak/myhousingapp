@@ -1,15 +1,24 @@
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../FirebaseConfig";
 
+
 interface AccountOption {
   label: string;
   value: string;
   group: string;
 }
 
-export const fetchAccountList = async (groupNames: string[]) => {
+export const fetchAccountList = async (societyName: string,groupNames: string[]) => {
   try {
-    const ledgerGroupsRef = collection(db, "ledgerGroupsFinal");
+    
+    // Update collection name
+    const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`; // Updated collection name
+    const accountsCollectionName = `accounts_${societyName}`; // Updated collection name
+
+    
+
+    // Reference to ledger groups
+    const ledgerGroupsRef = collection(db, "Societies", societyName, ledgerGroupsCollectionName); // Updated collection name
 
     // Fetch accounts for the specified groups
     const fromQuerySnapshot = await getDocs(
@@ -20,8 +29,11 @@ export const fetchAccountList = async (groupNames: string[]) => {
 
     for (const doc of fromQuerySnapshot.docs) {
       const groupName = doc.data().name; // Get the group name
-      const accountsRef = collection(doc.ref, "accounts");
+
+      // Reference to accounts
+      const accountsRef = collection(doc.ref, accountsCollectionName); // Updated collection name
       const accountsSnapshot = await getDocs(accountsRef);
+
       accountsSnapshot.forEach((accountDoc) => {
         const accountData = accountDoc.data();
         accountOptions.push({

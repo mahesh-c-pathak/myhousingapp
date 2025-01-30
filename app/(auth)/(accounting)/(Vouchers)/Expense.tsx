@@ -3,24 +3,25 @@ import { View, ScrollView, StyleSheet, Alert, Platform, Text, FlatList  } from "
 import { TextInput, Button, Card, Menu, Appbar, ActivityIndicator } from "react-native-paper";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { collection, doc, getDoc, getDocs, query, where, addDoc, updateDoc } from "firebase/firestore";
-import { db } from "../../../../FirebaseConfig";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { updateLedger } from "../../../../utils/updateLedger";
-import { useSociety } from "../../../../utils/SocietyContext";
-import CustomButton from '../../../../components/CustomButton';
-import CustomInput from '../../../../components/CustomInput';
-import Dropdown from "../../../../utils/DropDown";
-import PaymentDatePicker from "../../../../utils/paymentDate";
-import { fetchbankCashAccountOptions } from "../../../../utils/bankCashOptionsFetcher";
-import { expenseToGroupsList } from '../../../../components/LedgerGroupList'; // Import the array
-import { fetchAccountList } from "../../../../utils/acountFetcher";
-import { generateVoucherNumber } from "../../../../utils/generateVoucherNumber";
-
+import { db } from "@/FirebaseConfig";
+import { updateLedger } from "@/utils/updateLedger";
+import { useSociety } from "@/utils/SocietyContext";
+import CustomButton from '@/components/CustomButton';
+import CustomInput from '@/components/CustomInput';
+import Dropdown from "@/utils/DropDown";
+import PaymentDatePicker from "@/utils/paymentDate";
+import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
+import { expenseToGroupsList } from '@/components/LedgerGroupList'; // Import the array
+import { fetchAccountList } from "@/utils/acountFetcher";
+import { generateVoucherNumber } from "@/utils/generateVoucherNumber";
+ 
 
 const ExpenseScreen: React.FC = () => {
   const router = useRouter();
   const params = useLocalSearchParams(); // Extrract parameters like `id`
   const isEditMode = !!params?.id;
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
 
   const {
     assetAccounts,
@@ -69,7 +70,7 @@ const ExpenseScreen: React.FC = () => {
     useEffect(() => {
       const fetchOptions = async () => {
         try {
-          const { accountOptions } = await fetchAccountList(expenseToGroupsList);
+          const { accountOptions } = await fetchAccountList(societyName,expenseToGroupsList);
           setAccountToOptions(accountOptions);
         } catch (error) {
           Alert.alert("Error", "Failed to fetch account options.");
@@ -82,7 +83,7 @@ const ExpenseScreen: React.FC = () => {
     useEffect(() => {
       const fetchbankCashOptions = async () => {
         try {
-          const { accountFromOptions } = await fetchbankCashAccountOptions();
+          const { accountFromOptions } = await fetchbankCashAccountOptions(societyName);
           setAccountFromOptions(accountFromOptions);
         } catch (error) {
           Alert.alert("Error", "Failed to fetch bank Cash account options.");
@@ -96,7 +97,7 @@ const ExpenseScreen: React.FC = () => {
     const fetchTransactionDetails = async () => {
       if (isEditMode && params?.id) {
         try {
-          const transactionRef = doc(db, "Transaction", params.id as string);
+          const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
           const transactionDoc = await getDoc(transactionRef);
 
           if (transactionDoc.exists()) {
@@ -177,7 +178,7 @@ const ExpenseScreen: React.FC = () => {
 
         if (isEditMode && params?.id) {
             // Update existing transaction
-            const transactionRef = doc(db, "Transaction", params.id as string);
+            const transactionRef = doc(db,"Societies", societyName, transactionCollectionName, params.id as string);
             const transactionDoc = await getDoc(transactionRef);
             if (!transactionDoc.exists()) {
               Alert.alert("Error", "Transaction not found.");
@@ -196,6 +197,7 @@ const ExpenseScreen: React.FC = () => {
 
            // Revert original ledger updates
             await updateLedger(
+              societyName,
               originalGroupTo,
               originalPaidTo,
               originalAmount,
@@ -204,6 +206,7 @@ const ExpenseScreen: React.FC = () => {
             );
 
             await updateLedger(
+              societyName,
               originalGroupFrom,
               originalPaidFrom,
               originalAmount,
@@ -213,9 +216,9 @@ const ExpenseScreen: React.FC = () => {
 
 
             // Apply new ledger updates
-            await updateLedger( groupTo, paidTo, parsedAmount, liabilityAccounts.includes(paidTo) ? "Subtract" : "Add",formattedDate);
+            await updateLedger(societyName, groupTo, paidTo, parsedAmount, liabilityAccounts.includes(paidTo) ? "Subtract" : "Add",formattedDate);
 
-            await updateLedger( groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
+            await updateLedger(societyName, groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
 
             Alert.alert("Success", "Transaction updated successfully!", [
                 {
@@ -228,17 +231,18 @@ const ExpenseScreen: React.FC = () => {
             const voucher = await generateVoucherNumber();
             transaction.voucher = voucher;
 
-            await addDoc(collection(db, "Transaction"), transaction);
+            await addDoc(collection(db,"Societies", societyName, transactionCollectionName), transaction);
 
             // Update ledger
             await updateLedger(
+              societyName,
               groupTo,
               paidTo,
               parsedAmount,
               liabilityAccounts.includes(paidTo) ? "Subtract" : "Add",
               formattedDate
             );
-            await updateLedger(groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
+            await updateLedger(societyName,groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
             
 
             Alert.alert("Success", "Transaction saved successfully!", [

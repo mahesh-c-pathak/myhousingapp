@@ -2,14 +2,17 @@ import React, { useState, useEffect } from "react";
 import { View, ScrollView, TextInput, Alert, TouchableOpacity, StyleSheet } from "react-native";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Appbar, Button, Text, Avatar, Switch } from "react-native-paper";
-import Dropdown from "../../../utils/DropDown";
+import Dropdown from "@/utils/DropDown";
 import { collection, doc, getDoc, getDocs, query, where, setDoc } from "firebase/firestore";
-import { useSociety } from "../../../utils/SocietyContext";
-import { db } from "../../../FirebaseConfig";
-import PaymentDatePicker from "../../../utils/paymentDate";
-import { generateVoucherNumber } from "../../../utils/generateVoucherNumber";
-import { updateLedger } from "../../../utils/updateLedger";
-import paymentModeOptions from "../../../constants/paymentModeOptions";
+import { useSociety } from "@/utils/SocietyContext";
+import { db } from "@/FirebaseConfig";
+import PaymentDatePicker from "@/utils/paymentDate";
+import { generateVoucherNumber } from "@/utils/generateVoucherNumber";
+import { updateLedger } from "@/utils/updateLedger";
+import paymentModeOptions from "@/constants/paymentModeOptions";
+import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
+import { generateTransactionId } from "@/utils/generateTransactionId";
+import { updateFlatCurrentBalance } from "@/utils/updateFlatCurrentBalance";
 
 const Advance = () => {
   const router = useRouter();
@@ -23,16 +26,24 @@ const Advance = () => {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [ledgerAccount, setLedgerAccount] = useState<any>("");
-  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string }[]>([]);
+  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
+  const [groupFrom, setGroupFrom] = useState<string>("");
+  
   const [paymentDate, setPaymentDate] = useState(new Date(params.paymentDate as string || Date.now()));
 
   const [isDeposit, setIsDeposit] = useState(false);
+
+  const customWingsSubcollectionName = `${societyName} wings`;
+    const customFloorsSubcollectionName = `${societyName} floors`;
+    const customFlatsSubcollectionName = `${societyName} flats`;
+    const customFlatsBillsSubcollectionName = `${societyName} bills`;
+    const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`
 
   
 
   const [paymentMode, setpaymentMode] = useState<string>("");
   const [showPaymentMode, setShowPaymentMode] = useState<boolean>(false);
-  const [bankAccountOptions, setBankAccountOptions] = useState<string[]>([]);
+  const [bankAccountOptions, setBankAccountOptions] = useState<{ label: string; value: string; group: string }[]>([]);
   
   // Format date as YYYY-MM-DD
   const formatDate = (date: Date) => {
@@ -43,55 +54,144 @@ const Advance = () => {
   };
 
   const [formattedDate, setFormattedDate] = useState(formatDate(paymentDate));
+  
+  // Handle Date Picker Change
+  const handleDateChange = (newDate: Date) => {
+    setPaymentDate(newDate);
+    setFormattedDate(formatDate(newDate));
+  };
 
   useEffect(() => {
     setFormattedDate(formatDate(paymentDate))
   }, [paymentDate]);
 
-  useEffect(() => {
-    const fetchAccountOptions = async () => {
-      try {
-        const ledgerGroupsRef = collection(db, "ledgerGroups");
-        const fromQuerySnapshot = await getDocs(
-          query(ledgerGroupsRef, where("name", "in", ["Bank Accounts", "Cash in Hand"]))
-        );
+  // fetch Paid from List
+            useEffect(() => {
+              const fetchbankCashOptions = async () => {
+                try {
+                  const { accountFromOptions, bankAccountOptions } = await fetchbankCashAccountOptions(societyName);
+                  setAccountFromOptions(accountFromOptions);
+                  setBankAccountOptions(bankAccountOptions);
+                } catch (error) {
+                  Alert.alert("Error", "Failed to fetch bank Cash account options.");
+                }
+              };
+          
+              fetchbankCashOptions();
+            }, [params?.id]);
 
-        const fromAccounts = fromQuerySnapshot.docs
-          .map((doc) => doc.data().accounts || [])
-          .flat()
-          .filter((account) => account.trim() !== "")
-          .map((account) => ({ label: account, value: account }));
+   useEffect(() => {
 
-        const bankAccountsSnapshot = await getDocs(
-            query(ledgerGroupsRef, where("name", "in", ["Bank Accounts"]))
-          );
-
-        const bankAccounts = bankAccountsSnapshot.docs
-        .map((doc) => doc.data().accounts || [])
-        .flat();
-
-        setAccountFromOptions(fromAccounts);
-        setBankAccountOptions(bankAccounts);
-      } catch (error) {
-        console.error("Error fetching account options:", error);
-        Alert.alert("Error", "Failed to fetch account options.");
-      }
-    };
-
-    fetchAccountOptions();
-  }, []);
-
-  useEffect(() => {
-    if (bankAccountOptions.includes(ledgerAccount)) {
+    if (bankAccountOptions.some(option => option.group === groupFrom)) {
       setShowPaymentMode(true);
     } else {
       setShowPaymentMode(false);
       setpaymentMode("Cash");
     }
-
   }, [bankAccountOptions, ledgerAccount]);
 
   const handleSave = async () => {
+    try {
+
+      if (!ledgerAccount || !amount) {
+        Alert.alert("Error", "Please enter an amount and select a ledger account.");
+        return;
+      }
+      
+      // Update  advance entry
+      const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
+      const flatDocRef = doc(db, flatRef);
+      const unclearedBalanceRef = collection(flatDocRef, unclearedBalanceSubcollectionName);
+      let transactionId = generateTransactionId();
+      // Keep generating a new transactionId if it already exists
+      let docRef = doc(unclearedBalanceRef, transactionId);
+      let docSnap = await getDoc(docRef);
+      
+      while (docSnap.exists()) {
+        transactionId = generateTransactionId(); // Generate a new ID
+        docRef = doc(unclearedBalanceRef, transactionId); // Update docRef
+        docSnap = await getDoc(docRef); // Check again
+      }
+
+      const voucherNumber = await generateVoucherNumber();
+      const advanceAmount = parseFloat(amount);
+
+      // Create a new advance entry
+      const newAdvanceEntry = {
+        status: "Cleared",
+        amount: advanceAmount,
+        paymentReceivedDate: formattedDate, // Save formatted date,
+        paymentDate,
+        ledgerAccount,
+        note,
+        voucherNumber,
+        isDeposit,
+        paymentMode,
+        type: "Advance",
+        origin:"Admin entered Advance",
+      };
+
+      // Set the document once we have a unique transactionId
+        await setDoc(docRef, newAdvanceEntry);
+        console.log("Uncleared Balance Document created successfully.");
+
+      // Update deposit or current balance based on `isDeposit`
+      if (isDeposit) {
+        // relevantWing.deposit = (relevantWing.deposit || 0) + advanceAmount;
+        try {
+          const depositSubcollectionName = `deposit_${flatNumber}`
+          const depositCollectionRef = collection(db, flatRef, depositSubcollectionName);
+          const result = await updateFlatCurrentBalance(depositCollectionRef, advanceAmount, "Add", formattedDate);
+          console.log("Deposit update result:", result);
+          
+        } catch (error) {
+          console.error("Failed to update Flat Deposit balance:", error);
+        }
+        
+      } else {
+        // relevantWing.currentBalance = (relevantWing.currentBalance || 0) + advanceAmount;
+        try {
+            const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`
+            const currentbalanceCollectionRef = collection(db, flatRef, currentBalanceSubcollectionName);
+        
+            const result = await updateFlatCurrentBalance(currentbalanceCollectionRef, advanceAmount, "Add", formattedDate);
+        
+            console.log("Balance update result:", result);
+          } catch (error) {
+            console.error("Failed to update Flat Current balance:", error);
+          }
+      }
+        // Update Ledger
+          const updatePromises = [];
+
+          const LedgerUpdate1 = await updateLedger(societyName,groupFrom, ledgerAccount, parseFloat(amount as string), "Add", formattedDate ); // Update Ledger
+          const LedgerUpdate2 = await updateLedger(societyName,"Current Liabilities","Members Advanced", parseFloat(amount as string), "Add", formattedDate ); // Update Ledger
+
+          updatePromises.push(
+            LedgerUpdate1, LedgerUpdate2
+          );
+
+          // Wait for all updates to complete
+          await Promise.all(updatePromises);
+
+          Alert.alert("Success", "Advance entry saved successfully.", [
+            {
+              text: "OK",
+              onPress: () =>
+                router.replace({
+                  pathname: "/FlatCollectionSummary",
+                  params: { wing, floorName, flatNumber },
+                }),
+            },
+          ]);
+     
+    } catch (error) {
+      console.error("Error in handleSave:", error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    }
+  }
+
+  const handleSaveOld = async () => {
     try {
       if (!ledgerAccount || !amount) {
         Alert.alert("Error", "Please enter an amount and select a ledger account.");
@@ -160,8 +260,8 @@ const Advance = () => {
 
           const updatePromises = [];
 
-          const LedgerUpdate1 = await updateLedger(ledgerAccount, parseFloat(amount as string), "Add" ); // Update Ledger
-          const LedgerUpdate2 = await updateLedger("Members Advanced", parseFloat(amount as string), "Add" ); // Update Ledger
+          const LedgerUpdate1 = await updateLedger(societyName,groupFrom, ledgerAccount, parseFloat(amount as string), "Add", formattedDate ); // Update Ledger
+          const LedgerUpdate2 = await updateLedger(societyName,"Current Liabilities","Members Advanced", parseFloat(amount as string), "Add", formattedDate ); // Update Ledger
 
           updatePromises.push(
             LedgerUpdate1, LedgerUpdate2
@@ -223,15 +323,31 @@ const Advance = () => {
           onChangeText={setNote}
           multiline
         />
-            {/* Ledger Account */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Ledger Account</Text>
-          <Dropdown
-            data={accountFromOptions}
-            onChange={setLedgerAccount}
-            placeholder="Select Account"
-          />
-        </View>
+           
+
+        {/* Ledger Account */}
+            <View style={styles.section}>
+              <Text style={styles.label}>Ledger Account</Text>
+              <Dropdown
+                data={accountFromOptions.map((option) => ({
+                  label: option.label,
+                  value: option.value,
+                }))}
+                onChange={(selectedValue) => {
+                  setLedgerAccount(selectedValue);
+
+                  // Find the selected account to get its group
+                  const selectedOption = accountFromOptions.find(
+                    (option) => option.value === selectedValue
+                  );
+                  if (selectedOption) {
+                    setGroupFrom(selectedOption.group); // Set the group name
+                  }
+                }}
+                placeholder="Select Account"
+                initialValue={ledgerAccount}
+              />
+            </View>
 
             {/* Payment Mode */}
           {showPaymentMode && (
@@ -245,12 +361,14 @@ const Advance = () => {
             </View>
         )}
 
-            {/* Payment Date */}
+           
+
+        {/* Transaction Date */}
         <View style={styles.section}>
           <Text style={styles.label}>Payment Date</Text>
           <PaymentDatePicker
             initialDate={paymentDate}
-            onDateChange={setPaymentDate}
+            onDateChange={handleDateChange}
           />
         </View>
 

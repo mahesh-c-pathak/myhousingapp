@@ -11,7 +11,10 @@ import { billItemLedgerGroupList } from '../../../../components/LedgerGroupList'
 import { fetchAccountList } from "../../../../utils/acountFetcher";
 import Dropdown from "../../../../utils/DropDown";
 
+import { useSociety } from "@/utils/SocietyContext";
+
 const AddSpecialBillItem = () => {
+  const { societyName } = useSociety();
   const [itemName, setItemName] = useState("");
   const [notes, setNotes] = useState("");
   const [type, setType] = useState("");
@@ -96,7 +99,7 @@ const AddSpecialBillItem = () => {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const { accountOptions } = await fetchAccountList(billItemLedgerGroupList);
+        const { accountOptions } = await fetchAccountList(societyName,billItemLedgerGroupList);
         setAccountFromOptions(accountOptions);
       } catch (error) {
         Alert.alert("Error", "Failed to fetch account options.");

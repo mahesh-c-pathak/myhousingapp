@@ -5,7 +5,7 @@ import { Button, Card, IconButton, Divider, List } from "react-native-paper";
 
 import { db } from "@/FirebaseConfig";
 import { doc, getDoc, collection, getDocs, updateDoc } from "firebase/firestore";
-
+ 
 type SocietyDetails = {
     memberRole?: string[];
     myWing?: {
@@ -26,11 +26,145 @@ type SocietyDetails = {
     [societyName: string]: SocietyDetails;
   };
 
+  type UserDetails = {
+    [userId: string]: {
+      userName: string;
+      userStatus: string;
+      userType: string;
+    };
+  };
+
 const ApproveMember = () => {
     const router = useRouter(); // Router for navigation
 
     const { itemdetail } = useLocalSearchParams();
     const parsedItemDetail = JSON.parse(itemdetail as string)
+
+    const parseduserId = parsedItemDetail.userId;
+    const parsedsocietyName = parsedItemDetail.societyName;
+    const parsedwing = parsedItemDetail.wing;
+    const parsedfloorName = parsedItemDetail.floorName;
+    const parsedflatNumber = parsedItemDetail.flatNumber;
+    const parsedItemDetailUserType = parsedItemDetail.flatDetails.userType
+    const parsedItemDetailFlatType = parsedItemDetail.flatDetails.FlatType
+
+    const parsedUserName = parsedItemDetail.userName;
+
+    const customWingsSubcollectionName = `${parsedsocietyName} wings`;
+    const customFloorsSubcollectionName = `${parsedsocietyName} floors`;
+    const customFlatsSubcollectionName = `${parsedsocietyName} flats`;
+    const customFlatsBillsSubcollectionName = `${parsedsocietyName} bills`;
+
+    
+    useEffect(() => {
+      // console.log('parsedItemDetail', parsedItemDetail);
+      console.log('parsedItemDetailUserType', parsedItemDetailUserType);
+      console.log('parsedItemDetailFlatType', parsedItemDetailFlatType);
+  }, [parsedItemDetail]);
+
+  const addUserDetailsToFlat = async (
+    societyName: string,
+    wing: string,
+    floorName: string,
+    flatNumber: string,
+    userName: string,
+    userId: string,
+    approvalStatus: string,
+    userType: string,
+    flatType: string
+  ) => {
+    try {
+      const flatRef = doc(
+        db,
+        "Societies",
+        societyName,
+        `${societyName} wings`,
+        wing,
+        `${societyName} floors`,
+        floorName,
+        `${societyName} flats`,
+        flatNumber
+      );
+  
+      // Fetch the current flat data
+      const flatSnapshot = await getDoc(flatRef);
+  
+      let currentDetails: UserDetails = {};
+      if (flatSnapshot.exists()) {
+        currentDetails = flatSnapshot.data().userDetails || {};
+      }
+  
+      // Check if the userId exists and update or add new
+      if (currentDetails[userId]) {
+        currentDetails[userId].userStatus = approvalStatus; // Update status
+        currentDetails[userId].userType = userType; // Update userType if needed
+      } else {
+        // Add a new user if userId doesn't exist
+        currentDetails[userId] = {
+          userName,
+          userStatus: approvalStatus,
+          userType,
+        };
+      }
+  
+      // Prepare conditional updates for other fields
+      const updates: any = {
+        userDetails: currentDetails, // Update the userDetails object
+      };
+
+      if (approvalStatus === "Denied Approval") {
+
+        if (flatType === "Rent") {
+          if (userType === "Renter") {
+            updates.renterRegisterd = "Notregistered";
+            updates.memberStatus = "Notregistered";
+          } else {
+            updates.ownerRegisterd = "Notregistered";
+           
+          }
+        } else {
+          updates.ownerRegisterd = "Notregistered";
+          updates.memberStatus = "Notregistered";
+        }
+      } else if (approvalStatus === "Approved") {
+        if (flatType === "Rent") {
+          if (userType === "Renter") {
+            updates.renterRegisterd = "Registered";
+            updates.memberStatus = "Registered";
+          } else {
+            updates.ownerRegisterd = "Registered";
+          }
+        } else {
+          updates.ownerRegisterd = "Registered";
+          updates.memberStatus = "Registered";
+        }
+      }
+  
+      if (approvalStatus === "Approved") {
+        if (flatType === "Rent") {
+          if (userType === "Renter") {
+            updates.renterRegisterd = "Registered";
+            updates.memberStatus = "Registered";
+          } else {
+            updates.ownerRegisterd = "Registered";
+           
+          }
+        } else {
+          updates.ownerRegisterd = "Registered";
+          updates.memberStatus = "Registered";
+        }
+      }
+  
+      // Update the document fields
+      await updateDoc(flatRef, updates);
+  
+      console.log("Flat document updated successfully with user details");
+    } catch (error) {
+      console.error("Error updating flat details:", error);
+    }
+  };
+  
+  
     
     const handleUserApproval = async (
         userId: string,
@@ -46,6 +180,7 @@ const ApproveMember = () => {
     
           if (userDocSnapshot.exists()) {
             const userData = userDocSnapshot.data();
+            
     
             if (userData?.mySociety) {
               const updatedSocietyData = userData.mySociety.map((societyObj: SocietyObj) => {
@@ -73,6 +208,8 @@ const ApproveMember = () => {
                       },
                     },
                   };
+
+                  addUserDetailsToFlat(societyName, wing, floor, flatNumber,parsedUserName, userId, approvalStatus, parsedItemDetailUserType, parsedItemDetailFlatType )
     
                   return {
                     [currentSocietyName]: {
@@ -114,11 +251,11 @@ const ApproveMember = () => {
               text: "Yes",
               onPress: async () => {
                 const isSuccess = await handleUserApproval(
-                  parsedItemDetail.userId,
-                  parsedItemDetail.societyName,
-                  parsedItemDetail.wing,
-                  parsedItemDetail.floorName,
-                  parsedItemDetail.flatNumber,
+                  parseduserId,
+                  parsedsocietyName,
+                  parsedwing,
+                  parsedfloorName,
+                  parsedflatNumber,
                   "Approved"
                 );
     
@@ -149,11 +286,11 @@ const ApproveMember = () => {
               text: "Yes",
               onPress: async () => {
                 const isSuccess = await handleUserApproval(
-                  parsedItemDetail.userId,
-                  parsedItemDetail.societyName,
-                  parsedItemDetail.wing,
-                  parsedItemDetail.floorName,
-                  parsedItemDetail.flatNumber,
+                  parseduserId,
+                  parsedsocietyName,
+                  parsedwing,
+                  parsedfloorName,
+                  parsedflatNumber,
                   "Denied Approval"
                 );
     

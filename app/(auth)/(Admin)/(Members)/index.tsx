@@ -43,27 +43,49 @@ const MembersScreen: React.FC = () => {
   const router = useRouter(); // Router for navigation
 
   const [cards, setCards] = useState<any[]>([]);
+  const [wingNames, setWingNames] = useState<string[]>([]); // State to store wing names
+
+      useEffect(() => {
+          const wingNames = async () => {
+              try {
+                  const wingsRef = collection(db, 'Societies', societyName, 'wings'); // Reference to wings collection
+                  const wingsSnapshot = await getDocs(wingsRef); // Fetch all documents in wings collection
+                  if (!wingsSnapshot.empty) {
+                      const wingList: string[] = [];
+                      wingsSnapshot.forEach((doc) => {
+                          wingList.push(doc.id); // Add document ID (wing name) to the array
+                      });
+  
+                      setWingNames(wingList); // Update state with wing names
+                  }
+                 
+              } catch (error) {
+                  console.log("error fetching flat data", error)
+              }
+          };
+          wingNames()
+        }, []);
 
   useEffect(() => {
     const fetchSocieties = async (givenSocietyName: string) => {
       try {
         const usersCollectionRef = collection(db, "users"); // Reference to the users collection
         const usersSnapshot = await getDocs(usersCollectionRef); // Fetch all documents in the users collection
-    
+  
         const cardList: any[] = [];
-    
+  
         // Iterate through all user documents
         usersSnapshot.forEach((userDoc) => {
           if (userDoc.exists()) {
             const userData = userDoc.data();
             const userName = userData.name;
             const userId = userDoc.id;
-    
+  
             // Check if `mySociety` exists before iterating
             if (userData.mySociety) {
               userData.mySociety.forEach((societyObj: SocietyObj) => {
                 const [societyName, societyDetails] = Object.entries(societyObj)[0];
-    
+  
                 // Filter for the given societyName
                 if (societyName === givenSocietyName && societyDetails.myWing) {
                   Object.entries(societyDetails.myWing).forEach(([wing, wingData]) => {
@@ -72,20 +94,17 @@ const MembersScreen: React.FC = () => {
                         ([floorName, flats]: [string, any]) => {
                           Object.entries(flats).forEach(
                             ([flatNumber, flatDetails]: [string, any]) => {
-                              // Filter based on userStatus
-                              if (flatDetails.userStatus === "Pending Approval") {
-                                cardList.push({
-                                  id: `${societyName}-${flatNumber}`,
-                                  societyName,
-                                  role: `${wing} ${flatNumber} ${flatDetails.userType || "Owner"}`,
-                                  flatDetails,
-                                  wing,
-                                  floorName,
-                                  flatNumber,
-                                  userName,
-                                  userId,
-                                });
-                              }
+                              cardList.push({
+                                id: `${societyName}-${flatNumber}-${userId}`, // Include userId for uniqueness
+                                societyName,
+                                role: `${wing} ${flatNumber} ${flatDetails.userType || "Owner"}`,
+                                flatDetails,
+                                wing,
+                                floorName,
+                                flatNumber,
+                                userName,
+                                userId,
+                              });
                             }
                           );
                         }
@@ -97,16 +116,18 @@ const MembersScreen: React.FC = () => {
             }
           }
         });
-    
+  
         setCards(cardList); // Update cards state with all fetched data
       } catch (error) {
         console.error("Error fetching society data:", error);
       }
     };
-    
+  
+    fetchSocieties(societyName);
+  }, []);
+  
 
-      fetchSocieties(societyName);
-    }, []);
+ 
   
    
   const handlePress = (button: string) => {
@@ -119,7 +140,45 @@ const MembersScreen: React.FC = () => {
   
     return (
       <TouchableOpacity
-       style={styles.cardContainer}
+       style={[styles.cardContainer, { backgroundColor: '#ffcbd1' }]}
+       onPress={() => {
+        router.push({
+            pathname: "/ApproveMember",
+            params: {
+                itemdetail: JSON.stringify(item),
+                // Add other necessary params if available
+            },
+        }); 
+      }}
+       >
+        {/* Avatar */}
+        <Avatar.Text
+          size={40}
+          label={userName?.charAt(0)?.toUpperCase() || '?'}
+          style={styles.avatar}
+        />
+  
+        {/* Details */}
+        <View style={styles.detailsContainer}>
+          <Text style={styles.userName}>{userName}</Text>
+          <Text style={styles.userDetails}>
+            {wing} {role.split(' ')[1]} • {userType}
+          </Text>
+        </View>
+  
+        {/* Call Icon */}
+        <IconButton icon="phone" iconColor="#6200ee" onPress={() => {}} />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderApprovedItems = ({ item }: { item: any }) => {
+    const { userName, wing, floorName, flatDetails, role } = item;
+    const { userType } = flatDetails;
+  
+    return (
+      <TouchableOpacity
+      style={[styles.cardContainer, { backgroundColor: 'FFFFFF' }]}
        onPress={() => {
         router.push({
             pathname: "/ApproveMember",
@@ -171,22 +230,21 @@ const MembersScreen: React.FC = () => {
         <Text style={styles.summaryText}>Population: 0</Text>
       </View>
 
-      {/* Payment Request Section */}
+      {/* Pending Approval Section */}
       {cards.length > 0 && (
                 <View>
                     <FlatList
-                        data={cards}
+                        data={cards.filter((item) => item.flatDetails.userStatus === "Pending Approval")} // Filter for Approved flats
                         keyExtractor={(item, index) => index.toString()}
                         renderItem={renderPendingAprovalItem}
-                        
-                        scrollEnabled={false} // Disable scrolling
+                        // scrollEnabled={false} // Disable scrolling
                     />
                 </View>
             )}
 
       {/* Buttons Section */}
       <View style={styles.buttonsContainer}>
-        {['A', 'B', 'C'].map((item) => (
+        {wingNames.map((item) => (
           <TouchableOpacity
             key={item}
             style={[
@@ -207,11 +265,23 @@ const MembersScreen: React.FC = () => {
         ))}
       </View>
 
+       {/* Approved Section */}
+       <FlatList
+              data={cards.filter(
+                (item) =>
+                  item.flatDetails.userStatus === "Approved" && // Filter for "Approved" status
+                  item.wing === selectedButton // Filter for the selected wing
+              )}
+              keyExtractor={(item) => item.id}
+              renderItem={renderApprovedItems}
+              ListEmptyComponent={<View style={styles.noMembersContainer}>
+              <IconButton icon="file-document-outline" size={64} iconColor="#ccc" />
+              <Text style={styles.noMembersText}>No Members.</Text>
+            </View>}
+            />
+
       {/* No Members Section */}
-      <View style={styles.noMembersContainer}>
-        <IconButton icon="file-document-outline" size={64} iconColor="#ccc" />
-        <Text style={styles.noMembersText}>No Members.</Text>
-      </View>
+      
 
       {/* Floating Action Button */}
       <FAB
@@ -253,6 +323,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: '#6200ee',
+    marginBottom: 16,
   },
   summaryText: {
     color: '#fff',
@@ -261,7 +332,8 @@ const styles = StyleSheet.create({
   buttonsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 16,
+    marginBottom: 16,
   },
   button: {
     borderWidth: 1,
@@ -300,18 +372,15 @@ const styles = StyleSheet.create({
   cardContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffcbd1',
     padding: 10,
     marginBottom: 10,
     borderRadius: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
+    borderWidth: 1, // Add a visible border
+    borderColor: '#ccc', // Set the border color (e.g., light gray)
+    marginHorizontal:10,
   },
   avatar: {
-    backgroundColor: '#6200ee',
+    backgroundColor: '#2196F3',
   },
   detailsContainer: {
     flex: 1,

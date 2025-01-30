@@ -25,6 +25,10 @@ interface FinancialYear {
 }
 
 const BalanceSheetNew: React.FC = () => {
+  const { societyName } = useSociety();
+  const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`;
+  const accountsCollectionName = `accounts_${societyName}`;
+  const balancesCollectionName = `balances_${societyName}`;
   const [financialYears, setFinancialYears] = useState<FinancialYear[]>([]);
   const { width } = useWindowDimensions();
   const [fromDate, setFromDate] = useState(new Date(Date.now()));
@@ -127,18 +131,19 @@ const BalanceSheetNew: React.FC = () => {
   const fetchLedgerGroupsNew = async () => {
     setLoading(true);
     try {
-      const ledgerGroupsRef = collection(db, "ledgerGroupsFinal"); // Updated collection name
+      const ledgerGroupsRef = collection(db,"Societies", societyName, ledgerGroupsCollectionName); // Updated collection name
       const ledgerGroupsSnapshot = await getDocs(ledgerGroupsRef);
 
       const ledgerGroupsPromises = ledgerGroupsSnapshot.docs.map(async (ledgerGroupDoc) => {
         const ledgerGroupName = ledgerGroupDoc.id;
-        const accountsRef = collection(db, `ledgerGroupsFinal/${ledgerGroupDoc.id}/accounts`); // Updated collection path
+        const accountsRef = collection(db, `Societies/${societyName}/${ledgerGroupsCollectionName}/${ledgerGroupDoc.id}/${accountsCollectionName}`); // Updated collection path
         const accountsSnapshot = await getDocs(accountsRef);
 
         const accountsPromises = accountsSnapshot.docs.map(async (accountDoc) => {
           const accountName = accountDoc.id;
         
           const latestBalance = await fetchLatestBalanceBeforeDate(
+            societyName,
             ledgerGroupName,
             accountName,
             toDate.toISOString() // Ensure the date is in ISO format
@@ -245,16 +250,16 @@ const BalanceSheetNew: React.FC = () => {
     const formattedStartDate = formatDate(start);
     const formattedEndDate = formatDate(end);
   
-    const balanceBank = await fetchLatestBalanceBeforeDate("Bank Accounts", "Bank", formattedStartDate);
+    const balanceBank = await fetchLatestBalanceBeforeDate(societyName,"Bank Accounts", "Bank", formattedStartDate);
     setOpeningBankBalance(balanceBank);
   
-    const balanceCash = await fetchLatestBalanceBeforeDate("Cash in Hand", "Cash", formattedStartDate);
+    const balanceCash = await fetchLatestBalanceBeforeDate(societyName,"Cash in Hand", "Cash", formattedStartDate);
     setOpeningCashBalance(balanceCash);
   
-    const balanceBankForDate = await fetchLatestBalanceBeforeDate("Bank Accounts", "Bank", formattedEndDate);
+    const balanceBankForDate = await fetchLatestBalanceBeforeDate(societyName,"Bank Accounts", "Bank", formattedEndDate);
     setClosingBankBalance(balanceBankForDate);
   
-    const balanceCloseForDate = await fetchLatestBalanceBeforeDate("Cash in Hand", "Cash", formattedEndDate);
+    const balanceCloseForDate = await fetchLatestBalanceBeforeDate(societyName,"Cash in Hand", "Cash", formattedEndDate);
     setClosingCashBalance(balanceCloseForDate);
   };
 

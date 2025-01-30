@@ -18,6 +18,7 @@ const adminDashboardScreen = () => {
   const quickAccess = [
     { label: 'Bills', icon: 'file-document', route: "/(Bills)" }, 
     { label: 'Collection', icon: 'cart', route: "/Collection"},
+    { label: 'CollectionNew', icon: 'cart', route: "/CollectionNew"},
     { label: 'Accounting', icon: 'book-account', route: "/(accounting)"  },
     { label: 'Complains', icon: 'note-edit' },
   ];

@@ -10,7 +10,7 @@ import { useSociety } from "../../../utils/SocietyContext";
 const paymentRecipt = () => {
   const router = useRouter();
   const { societyName } = useSociety();
-  const { wing,floorName,flatNumber, amount, paymentDate, transactionId, paymentMode, notes, receiptImage, selectedIds } = useLocalSearchParams();
+  const { wing,floorName,flatNumber, amount, paymentDate, transactionId, paymentMode, notes, receiptImage, selectedIds, bankName,chequeNo } = useLocalSearchParams();
 
   // Ensure these are strings
     const formattedWing = String(wing);
@@ -21,6 +21,8 @@ const paymentRecipt = () => {
     const formattedTransactionId = String(transactionId);
     const formattedPaymentMode = String(paymentMode);
     const formattednotes = String(notes);
+    const formattedbankName = String(bankName);
+    const formattedchequeNo = String(chequeNo);
 
   
   const [isModalVisible, setIsModalVisible] = useState(false); // Modal state
@@ -186,6 +188,9 @@ const paymentRecipt = () => {
               paymentMode: formattedPaymentMode,
               transactionId: formattedTransactionId,
               selectedIds,
+              bankName:formattedbankName,
+              chequeNo:formattedchequeNo,
+
               // Add other necessary params if available
           },
             

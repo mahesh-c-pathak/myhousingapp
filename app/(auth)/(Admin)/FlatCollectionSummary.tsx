@@ -2,7 +2,7 @@ import { StyleSheet, View, FlatList, TouchableOpacity, ScrollView } from 'react-
 import React, { useEffect, useState } from "react";
 import { useSociety } from "../../../utils/SocietyContext";
 import { useRouter, useLocalSearchParams, useNavigation, Stack } from 'expo-router';
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where,  orderBy, limit } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
 import { Appbar, Button, Card, Text, TouchableRipple, Avatar, Menu, Divider, Checkbox } from "react-native-paper";
 
@@ -57,16 +57,103 @@ const FlatCollectionSummary = () => {
 
     const [selectedBills, setSelectedBills] = useState<string[]>([]); // NEW STATE
 
+    const customWingsSubcollectionName = `${societyName} wings`;
+    const customFloorsSubcollectionName = `${societyName} floors`;
+    const customFlatsSubcollectionName = `${societyName} flats`;
+    const customFlatsBillsSubcollectionName = `${societyName} bills`;
+
+    const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`
+
 
     useEffect(() => {
         fetchBills();
     }, []);
 
-   
+    const fetchBills = async () => {
+        try {
+
+            const billsData: BillsData[] = []; // Explicitly define the type for billsData
+                    
+            const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
+            const flatDocRef = doc(db, flatRef);
+            const billsCollectionRef = collection(flatDocRef, customFlatsBillsSubcollectionName);
+            const flatbillCollection = await getDocs(billsCollectionRef);
+
+            flatbillCollection.forEach((billDoc) => {
+                const billData = billDoc.data();
+                const billStatus = billData.status;
+                const billAmount = billData.amount || 0;
+      
+                billsData.push({
+                  id: billDoc.id,
+                  title: billData.name || "My bill",
+                  dueDate: billData.dueDate,
+                  overdueDays: calculateOverdueDays(billData.dueDate),
+                  amount: billAmount,
+                  status: billStatus,
+                });
+              });
+              setBills(billsData);
+
+              // Process uncleared balances
+              // Reference to the uncleared balance subcollection
+            const unclearedBalanceRef = collection(flatDocRef, unclearedBalanceSubcollectionName);
+        
+            // Query to fetch all documents with status "Uncleared"
+            const querySnapshot = await getDocs(query(unclearedBalanceRef, where("status", "==", "Uncleared")));
+
+            // Extract and typecast document data
+            const unclearedBalances: UnclearedBalance[] = querySnapshot.docs.map((doc) => {
+                const data = doc.data();
+            
+                return {
+                amount: data.amountPaid || 0,
+                paymentDate: data.paymentDate || "",
+                paymentMode: data.paymentMode || "",
+                transactionId: data.transactionId || "",
+                bankName: data.bankName || "",
+                chequeNo: data.chequeNo || "",
+                status: data.status || "Uncleared",
+                selectedIds: data.selectedIds || [],
+                };
+            });
+  
+            
+            // Set state with fetched data
+            setUnclearedBalances(unclearedBalances);
+
+            // Set Current Balance and Deposit
+            
+            // setDeposit(relevantWing.deposit || 0);
+            const depositSubcollectionName = `deposit_${flatNumber}`
+            const depositCollection = collection(flatDocRef, depositSubcollectionName);
+            const dateString = new Date().toISOString().split('T')[0];
+            const q = query(depositCollection, where("date", "<=", dateString), orderBy("date", "desc"), limit(1));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const data = snapshot.docs[0].data();
+                setDeposit(data.cumulativeBalance);  // Use cumulativeBalance or default to 0
+              }
+            // setCurrentBalance(relevantWing.currentBalance || 0);
+            const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`
+            const currentBalanceSubcollection = collection(flatDocRef, currentBalanceSubcollectionName);
+            
+            const currentBalancequery = query(currentBalanceSubcollection, where("date", "<=", dateString), orderBy("date", "desc"), limit(1));
+            const currentBalancesnapshot = await getDocs(currentBalancequery);
+            if (!currentBalancesnapshot.empty) {
+                const data = currentBalancesnapshot.docs[0].data();
+                setCurrentBalance(data.cumulativeBalance);  // Use cumulativeBalance or default to 0
+              }
+            
+      
+        } catch (error) {
+            console.error("Error fetching bills:", error);
+        }
+    }
 
     
 
-    const fetchBills = async () => {
+    const fetchBillsOld = async () => {
         try {
             const societiesDocRef = doc(db, "Societies", societyName as string);
             const societyDocSnap = await getDoc(societiesDocRef);
@@ -226,6 +313,8 @@ const FlatCollectionSummary = () => {
                     paymentMode: item.paymentMode,
                     transactionId: item.transactionId,
                     selectedIds: JSON.stringify(item.selectedIds),
+                    bankName:item.bankName,
+                    chequeNo:item.chequeNo,
                     // Add other necessary params if available
                 },
             }); 
@@ -351,6 +440,7 @@ const FlatCollectionSummary = () => {
                                     wing: wing,
                                     floorName:floorName,
                                     flatNumber: flatNumber,
+                                    currentBalance: currentBalance.toString(), // Convert number to string
                                 },
                               })}
                         >

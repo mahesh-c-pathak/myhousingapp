@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { View, Text, ScrollView, StyleSheet, Alert, Button } from "react-native";
-import { collection, doc, getDoc, updateDoc, addDoc, setDoc, getDocs } from "firebase/firestore";
+import { collection, doc, getDoc, updateDoc, addDoc, setDoc, getDocs, collectionGroup } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { generateVoucherNumber } from "../../../../utils/generateVoucherNumber";
@@ -59,10 +59,18 @@ const NextScreenSpecial = () => {
   } = useLocalSearchParams();
   const router = useRouter();
 
+  const customWingsSubcollectionName = `${societyName} wings`;
+  const customFloorsSubcollectionName = `${societyName} floors`;
+  const customFlatsSubcollectionName = `${societyName} flats`;
+  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+
+  const specialBillCollectionName = `specialBills_${societyName}`;
+
   
 
   // Parse the JSON string for items
   let parsedItems: BillItem[] = [];
+  
   try {
     if (items) {
       parsedItems = JSON.parse(items as string); // Safely parse items if it exists
@@ -124,12 +132,10 @@ const NextScreenSpecial = () => {
               };
   
               // Create bill in Firestore
-              await setDoc(doc(db, "bills", billNumber), billData);
+              await setDoc(doc(db,"Societies", societyName, specialBillCollectionName, billNumber), billData);
+
+              // flatPath Societies/Z delete/Z delete wings/B/Z delete floors/Floor 3/Z delete flats/303
   
-              const wingsCollectionRef = collection(db, "Societies", societyName, "wings");
-              const wingsSnapshot = await getDocs(wingsCollectionRef);
-  
-              if (!wingsSnapshot.empty) {
                 const selectedMembers = members
                   ? (members as string).split(",").map((member) => member.trim())
                   : [];
@@ -138,26 +144,13 @@ const NextScreenSpecial = () => {
   
                 // Iterate through selected members
                 for (const member of selectedMembers) {
-                  const [floor, wing , flat] = member.split(" ");
+                  const [floor, wing, flat] = member.split("-");
                   console.log(`Processing: Wing=${wing}, Floor=${floor}, Flat=${flat}`);
 
-                  // Adjust floor format to match database format (e.g., "1" → "floor 1")
-                  const formattedFloor = `Floor ${floor}`;
-  
-                  const floorsCollectionRef = collection(db, "Societies", societyName, "wings", wing, "floors");
-                  const floorDocRef = doc(floorsCollectionRef, formattedFloor);
-                  const floorDocSnap = await getDoc(floorDocRef);
-  
-                  if (!floorDocSnap.exists()) {
-                    console.warn(`Floor ${floor} not found in wing ${wing}.`);
-                    continue;
-                  }
-  
-                  const flatsCollectionRef = collection(floorDocRef, "flats");
-
-                  const flatDocRef = doc(flatsCollectionRef, flat);
+                  const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floor}/${customFlatsSubcollectionName}/${flat}`
+                  const flatDocRef = doc(db, flatRef);
                   const flatDocSnap = await getDoc(flatDocRef);
-  
+                  
                   if (!flatDocSnap.exists()) {
                     console.warn(`Flat ${flat} not found on floor ${floor} in wing ${wing}.`);
                     continue;
@@ -165,6 +158,22 @@ const NextScreenSpecial = () => {
   
                   const flatDetails = flatDocSnap.data();
                   const residentType = flatDetails.resident;
+
+                  // Mahesh Start
+
+                      // Call the function to get bill details
+                      const billItemLedger = await getBillItemsLedger(societyName,billNumber, flatDetails.resident );
+
+                      // Process each item: log details and update ledger
+                      for (const { updatedLedgerAccount, ledgerAccount, groupFrom,amount, invoiceDate } of billItemLedger) {
+                        // Update ledger
+                        const ledgerUpdate1 = await updateLedger(societyName,"Account Receivable", updatedLedgerAccount, amount, "Add", invoiceDate);
+                        const ledgerUpdate2 = await updateLedger(societyName,groupFrom, ledgerAccount, amount, "Add", invoiceDate);
+                        console.log(`  Ledger Update Status: ${ledgerUpdate1}`);
+                        console.log(`  Ledger Update Status: ${ledgerUpdate2}`);
+                }
+
+                      // Mahesh End
   
                   // Calculate amount based on resident type
                   let amount = 0;
@@ -182,10 +191,12 @@ const NextScreenSpecial = () => {
                     originalAmount: amount,
                     dueDate: dueDate as string,
                     billType: "Special Bill",
+                    startDate: startDate,
+                    name: name
                   };
   
                   // Add the bill entry to the flat's bills collection
-                  const billsCollectionRef = collection(flatDocRef, "bills");
+                  const billsCollectionRef = collection(flatDocRef, customFlatsBillsSubcollectionName);
                   const billDocRef = doc(billsCollectionRef, billNumber);
                   updatePromises.push(setDoc(billDocRef, billEntry));
                 }
@@ -206,9 +217,7 @@ const NextScreenSpecial = () => {
                     },
                   ]
                 );
-              } else {
-                console.warn("No wings found in the wings collection.");
-              }
+
             } catch (error) {
               console.error("Error generating bill:", error);
               Alert.alert("Error", "Failed to create bill. Please try again.");

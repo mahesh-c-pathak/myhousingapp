@@ -2,15 +2,21 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Alert, Platform, Text } from "react-native";
 import { TextInput, Button, Appbar } from "react-native-paper";
 import { useRouter } from "expo-router";
-import { db } from "../../../FirebaseConfig";
+import { db } from "@/FirebaseConfig";
 import { collection, getDocs, doc, updateDoc, arrayUnion, addDoc, setDoc} from "firebase/firestore";
-import CustomInput from '../../../components/CustomInput';
-import CustomButton from '../../../components/CustomButton';
-import {ledgerGroupsList} from '../../../components/LedgerGroupList'; // Import the array
-import Dropdown from "../../../utils/DropDown";
-import PaymentDatePicker from "../../../utils/paymentDate";
+import CustomInput from '@/components/CustomInput';
+import CustomButton from '@/components/CustomButton';
+
+import Dropdown from "@/utils/DropDown";
+import PaymentDatePicker from "@/utils/paymentDate";
+import { useSociety } from "@/utils/SocietyContext";
 
 const AddLedgerAccountScreen: React.FC = () => {
+  const { societyName } = useSociety();
+  const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`;
+  const accountsCollectionName = `accounts_${societyName}`;
+  const balancesCollectionName = `balances_${societyName}`;
+
   const [name, setName] = useState<string>("");
   const [group, setGroup] = useState<string>("");
   const [ledgerGroups, setLedgerGroups] = useState<
@@ -38,7 +44,7 @@ const AddLedgerAccountScreen: React.FC = () => {
   useEffect(() => {
     const fetchLedgerGroups = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "ledgerGroupsFinal"));
+        const querySnapshot = await getDocs(collection(db, "Societies", societyName, ledgerGroupsCollectionName));
         const groups = querySnapshot.docs.map((doc) => ({
           label: doc.id,
           value: doc.data().name,
@@ -82,15 +88,15 @@ const AddLedgerAccountScreen: React.FC = () => {
   
       // Add to the selected group
       // Reference for the selected group
-        const selectedGroupDocRef = doc(db, "ledgerGroupsFinal", selectedGroup.label);
+        const selectedGroupDocRef = doc(db, "Societies", societyName, ledgerGroupsCollectionName, selectedGroup.label);
 
       // Set the account document with the `name` as the document ID
-        const accountDocRef = doc(collection(selectedGroupDocRef, "accounts"), name);
+        const accountDocRef = doc(collection(selectedGroupDocRef, accountsCollectionName), name);
         await setDoc(accountDocRef, { name });
 
        // Set the balance document with the `asOnDate` (formatted date) as the document ID
         const balanceDocRef = doc(
-          collection(accountDocRef, "balances"),
+          collection(accountDocRef, balancesCollectionName),
           formatDate(asOnDate)
         );
         await setDoc(balanceDocRef, {
@@ -107,20 +113,20 @@ const AddLedgerAccountScreen: React.FC = () => {
       if (accountReceivableGroup) {
         const accountReceivableDocRef = doc(
           db,
-          "ledgerGroupsFinal",
+          "Societies", societyName, ledgerGroupsCollectionName,
           accountReceivableGroup.label
         );
 
         // Add the account to "Account Receivable" group's accounts subcollection
         const receivableAccountDocRef = doc(
-          collection(accountReceivableDocRef, "accounts"),
+          collection(accountReceivableDocRef, accountsCollectionName),
           `${name} Receivable`
         );
         await setDoc(receivableAccountDocRef, { name: `${name} Receivable` });
 
         // Add a balances subcollection with an initial balance of 0.00
         const receivableBalanceDocRef = doc(
-          collection(receivableAccountDocRef, "balances"),
+          collection(receivableAccountDocRef, balancesCollectionName),
           formatDate(asOnDate)
         );
         await setDoc(receivableBalanceDocRef, {

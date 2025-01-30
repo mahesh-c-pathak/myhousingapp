@@ -11,8 +11,9 @@ import { transactionFromToGroupList } from '../../../components/LedgerGroupList'
 import { fetchAccountList } from "../../../utils/acountFetcher";
 // Import the date formatter utility
 import { formatDateIntl, formatDate } from "../../../utils/dateFormatter";
-import { fetchLatestBalanceBeforeDate } from "../../../utils/fetchbalancefromdatabase";
-
+import { fetchLatestBalanceBeforeDate } from "@/utils/fetchbalancefromdatabase";
+import { useSociety } from "@/utils/SocietyContext";
+ 
 
 interface Transaction {
   id: string;
@@ -28,6 +29,8 @@ interface Transaction {
 }
 
 const TransactionScreen = () => {
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [originaltransactions, setOriginalTransactions] = useState<any[]>([]);
 
@@ -62,15 +65,15 @@ const TransactionScreen = () => {
 
           useEffect(() => {
             const fetchbalances = async()=>{
-              const balancebank = await fetchLatestBalanceBeforeDate("Bank Accounts", "Bank", formattedDate);
+              const balancebank = await fetchLatestBalanceBeforeDate(societyName, "Bank Accounts", "Bank", formattedDate);
               setOpeningBankBalance(balancebank);
-              const balanceCash = await fetchLatestBalanceBeforeDate("Cash in Hand", "Cash", formattedDate);
+              const balanceCash = await fetchLatestBalanceBeforeDate(societyName,"Cash in Hand", "Cash", formattedDate);
               setOpeningCashBalance(balanceCash);
 
-              const balancebankfordate = await fetchLatestBalanceBeforeDate("Bank Accounts", "Bank", formattedToDate);
+              const balancebankfordate = await fetchLatestBalanceBeforeDate(societyName,"Bank Accounts", "Bank", formattedToDate);
               setClosingBankBalance(balancebankfordate);
-
-              const balanceclosefordate = await fetchLatestBalanceBeforeDate("Cash in Hand", "Cash", formattedToDate);
+              
+              const balanceclosefordate = await fetchLatestBalanceBeforeDate(societyName,"Cash in Hand", "Cash", formattedToDate);
               setClosingCashBalance(balanceclosefordate);
             };
             fetchbalances()
@@ -82,7 +85,7 @@ const TransactionScreen = () => {
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, 'Transaction'));
+        const querySnapshot = await getDocs(collection(db,"Societies", societyName, transactionCollectionName));
         const fetchedTransactions: Transaction[] = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -102,7 +105,7 @@ const TransactionScreen = () => {
   useEffect(() => {
       const fetchOptions = async () => {
         try {
-          const { accountOptions } = await fetchAccountList(transactionFromToGroupList);
+          const { accountOptions } = await fetchAccountList(societyName, transactionFromToGroupList);
             // push 'All' at the start of array using unshift
           accountOptions.unshift({ label: "All", value: "All", group:"All" });
             // Update the state with the sorted options

@@ -133,7 +133,9 @@ const MyPropertiesScreen = () => {
 
   const renderCard = ({ item }: { item: any }) => {
     const backgroundColor =
-      item.flatDetails?.userStatus === "Approved" ? "#fff" : "#DDDDDD";
+        item.role === "Admin" || item.flatDetails?.userStatus === "Approved"
+          ? "#fff"
+          : "#DDDDDD";
    
     return (
       <TouchableOpacity

@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, TouchableOpacity } from "react-native";
 import { Appbar, Button, Card, Text, TouchableRipple, Avatar, Checkbox, Divider } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSociety } from "../../../../utils/SocietyContext";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where  } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
 
 interface BillsData {
@@ -40,99 +40,86 @@ const index = () => {
   const floorName =
     source === "Admin" ? localParams.floorName : societyContext.floorName;
 
+    const customWingsSubcollectionName = `${societyName} wings`;
+    const customFloorsSubcollectionName = `${societyName} floors`;
+    const customFlatsSubcollectionName = `${societyName} flats`;
+    const customFlatsBillsSubcollectionName = `${societyName} bills`;
+
+    const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`
+
   useEffect(() => {
     fetchBills();
-    fetchUnclearedBalance(); // Fetch uncleared balance
+    fetchUnclearedBalance(); // Fetch uncleared balance   
   }, []);
 
   // Fetch and filter bills for the specific flat
-  const fetchBills = async () => {
-    try {
-      const societiesDocRef = doc(db, "Societies", societyName as string);
-      const societyDocSnap = await getDoc(societiesDocRef);
+ 
+    const fetchBills = async () => {
+      try {
+        const billsData: BillsData[] = []; // Explicitly define the type for billsData
+        
+        const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
+        const flatDocRef = doc(db, flatRef);
+        const billsCollectionRef = collection(flatDocRef, customFlatsBillsSubcollectionName);
+        const flatbillCollection = await getDocs(billsCollectionRef);
 
-      if (!societyDocSnap.exists()) {
-        console.error("Societies document does not exist");
-        return;
-      }
+        flatbillCollection.forEach((billDoc) => {
+          const billData = billDoc.data();
+          const billStatus = billData.status;
+          const billAmount = billData.amount || 0;
 
-      const societyData = societyDocSnap.data();
-      const societyWings = societyData.wings;
 
-      const relevantWing = societyWings?.[wing as string]?.floorData?.[floorName as string]?.[flatNumber as string];
-      if (!relevantWing || !relevantWing.bills) {
-        console.error("No bills found for this flat.");
-        return;
-      }
-
-      const billCollection = await getDocs(collection(db, "bills"));
-      const billsData: BillsData[] = []; // Explicitly define the type for billsData
-
-      billCollection.forEach((billDoc) => {
-        const bill = billDoc.data();
-        const billNumber = bill.billNumber;
-
-        const flatBill = relevantWing.bills[billNumber];
-        if (flatBill) {
           billsData.push({
             id: billDoc.id,
-            title: bill.name,
-            dueDate: bill.startDate,
-            overdueDays: calculateOverdueDays(bill.startDate),
-            amount: flatBill.amount,
-            status: flatBill.status,
+            title: billData.name || "My bill",
+            dueDate: billData.dueDate,
+            overdueDays: calculateOverdueDays(billData.dueDate),
+            amount: billAmount,
+            status: billStatus,
           });
-        }
-      });
+        });
 
-      setBills(billsData);
-    } catch (error) {
-      console.error("Error fetching bills:", error);
-    }
-  };
+        setBills(billsData);
+        
+      } catch (error) {
+        console.error("Error fetching bills:", error);
+      }
+    };
+
+    const fetchUnclearedBalance = async () => {
+      try {
+        // Reference to the uncleared balance subcollection
+        const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
+        const flatDocRef = doc(db, flatRef);
+        const unclearedBalanceRef = collection(flatDocRef, unclearedBalanceSubcollectionName);
+    
+        // Query to fetch all documents with status "Uncleared"
+        const querySnapshot = await getDocs(query(unclearedBalanceRef, where("status", "==", "Uncleared")));
+    
+        let totalUnclearedBalance = 0; // Temporary variable to calculate the total balance
+    
+        // Iterate over the query results
+        querySnapshot.forEach((doc) => {
+          const docData = doc.data();
+          const amountPaid = docData.amountPaid || 0; // Use 0 as default if amountPaid is undefined
+          totalUnclearedBalance += amountPaid; // Accumulate the amount
+        });
+    
+        // Update the state with the calculated total
+        setUnclearedBalance(totalUnclearedBalance);
+        console.log(`Total uncleared balance: ${totalUnclearedBalance}`);
+      } catch (error) {
+        console.error("Error fetching uncleared balance:", error);
+      }
+    };
+    
+
 
   const calculateOverdueDays = (dueDate: string) => {
     const due = new Date(dueDate);
     const today = new Date();
     const diffTime = today.getTime() - due.getTime();
     return Math.max(Math.floor(diffTime / (1000 * 60 * 60 * 24)), 0);
-  };
-
-  // Fetch uncleared balance and sum amounts
-  const fetchUnclearedBalance = async () => {
-    try {
-      const societiesDocRef = doc(db, "Societies", societyName as string);
-      const societyDocSnap = await getDoc(societiesDocRef);
-
-      if (societyDocSnap.exists()) {
-        const societyData = societyDocSnap.data();
-        const relevantWing = societyData.wings?.[wing as string]?.floorData?.[floorName as string]?.[flatNumber as string];
-
-          // Set Current Balance and Deposit
-        
-        setCurrentBalance(relevantWing.currentBalance || 0);
-    
-        
-
-        if (relevantWing && relevantWing.unclearedBalance) {
-          // Filter for entries with status "Uncleared"
-        const unclearedEntries = relevantWing.unclearedBalance.filter(
-          (entry: { status: string }) => entry.status === "Uncleared"
-        );
-
-        // Sum the amounts of filtered entries
-        const totalUncleared = unclearedEntries.reduce(
-          (sum: number, entry: { amount: number }) => sum + (entry.amount || 0),
-          0
-        );
-          setUnclearedBalance(totalUncleared);
-        } else {
-          setUnclearedBalance(0);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching uncleared balance:", error);
-    }
   };
 
   const toggleSelection = (id: string) => {

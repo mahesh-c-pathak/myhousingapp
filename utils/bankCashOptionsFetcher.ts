@@ -1,15 +1,22 @@
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../FirebaseConfig";
 
+
 interface AccountOption {
   label: string;
   value: string;
   group: string;
 }
 
-export const fetchbankCashAccountOptions = async () => {
+export const fetchbankCashAccountOptions = async (societyName: string) => {
   try {
-    const ledgerGroupsRef = collection(db, "ledgerGroupsFinal");
+    
+    // Update collection names
+    const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`; // Updated collection name
+    const accountsCollectionName = `accounts_${societyName}`; // Updated collection name
+
+    // Reference to ledger groups
+    const ledgerGroupsRef = collection(db,"Societies", societyName, ledgerGroupsCollectionName); // Updated collection name
 
     // Fetch Bank Accounts and Cash in Hand accounts
     const fromQuerySnapshot = await getDocs(
@@ -20,8 +27,11 @@ export const fetchbankCashAccountOptions = async () => {
 
     for (const doc of fromQuerySnapshot.docs) {
       const groupName = doc.data().name; // Get the group name
-      const accountsRef = collection(doc.ref, "accounts");
+
+      // Reference to accounts
+      const accountsRef = collection(doc.ref, accountsCollectionName); // Updated collection name
       const accountsSnapshot = await getDocs(accountsRef);
+
       accountsSnapshot.forEach((accountDoc) => {
         const accountData = accountDoc.data();
         accountFromOptions.push({
@@ -39,16 +49,18 @@ export const fetchbankCashAccountOptions = async () => {
     const bankAccountOptions: AccountOption[] = [];
     for (const doc of bankAccountsSnapshot.docs) {
       const groupName = doc.data().name; // Get the group name
-      const accountsRef = collection(doc.ref, "accounts");
+
+      // Reference to accounts
+      const accountsRef = collection(doc.ref, accountsCollectionName); // Updated collection name
       const accountsSnapshot = await getDocs(accountsRef);
+
       accountsSnapshot.forEach((accountDoc) => {
         const accountData = accountDoc.data();
         bankAccountOptions.push({
           label: accountData.name,
           value: accountData.name,
           group: groupName, // Include the group name
-        }        
-        );
+        });
       });
     }
 
@@ -59,16 +71,18 @@ export const fetchbankCashAccountOptions = async () => {
     const cashAccountOptions: AccountOption[] = [];
     for (const doc of cashAccountsSnapshot.docs) {
       const groupName = doc.data().name; // Get the group name
-      const accountsRef = collection(doc.ref, "accounts");
+
+      // Reference to accounts
+      const accountsRef = collection(doc.ref, accountsCollectionName); // Updated collection name
       const accountsSnapshot = await getDocs(accountsRef);
+
       accountsSnapshot.forEach((accountDoc) => {
         const accountData = accountDoc.data();
         cashAccountOptions.push({
           label: accountData.name,
           value: accountData.name,
           group: groupName, // Include the group name
-        }         
-        );
+        });
       });
     }
 

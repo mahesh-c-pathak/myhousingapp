@@ -13,8 +13,11 @@ import CustomButton from '../../../../components/CustomButton';
 import CustomInput from '../../../../components/CustomInput';
 import Dropdown from "../../../../utils/DropDown";
 import PaymentDatePicker from "../../../../utils/paymentDate";
+import { useSociety } from "@/utils/SocietyContext";
 
 const CashWithdrawal: React.FC = () => {
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
   const router = useRouter();
   const params = useLocalSearchParams();
   const isEditMode = !!params.id; // Detect edit mode if `id` exists in the query params
@@ -56,7 +59,7 @@ const CashWithdrawal: React.FC = () => {
     const fetchTransactionDetails = async () => {
       if (isEditMode && params.id) {
         try {
-          const transactionRef = doc(db, "Transaction", params.id as string);
+          const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
           const transactionSnapshot = await getDoc(transactionRef);
           if (transactionSnapshot.exists()) {
             const data = transactionSnapshot.data();
@@ -88,7 +91,7 @@ const CashWithdrawal: React.FC = () => {
       useEffect(() => {
         const fetchbankOptions = async () => {
           try {
-            const { bankAccountOptions } = await fetchbankCashAccountOptions();
+            const { bankAccountOptions } = await fetchbankCashAccountOptions(societyName);
             setAccountFromOptions(bankAccountOptions);
           } catch (error) {
             Alert.alert("Error", "Failed to fetch bank Cash account options.");
@@ -102,7 +105,7 @@ const CashWithdrawal: React.FC = () => {
   useEffect(() => {
     const fetchCashOptions = async () => {
       try {
-        const { cashAccountOptions } = await fetchbankCashAccountOptions();
+        const { cashAccountOptions } = await fetchbankCashAccountOptions(societyName);
         setAccountToOptions(cashAccountOptions);
       } catch (error) {
         Alert.alert("Error", "Failed to fetch bank Cash account options.");
@@ -156,7 +159,7 @@ const CashWithdrawal: React.FC = () => {
 
 
       if (isEditMode && params.id) {
-        const transactionRef = doc(db, "Transaction", params.id as string);
+        const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
         const transactionDoc = await getDoc(transactionRef);
         if (!transactionDoc.exists()) {
           Alert.alert("Error", "Transaction not found.");
@@ -177,6 +180,7 @@ const CashWithdrawal: React.FC = () => {
         // Revert original ledger updates
 
         await updateLedger(
+          societyName,
           originalGroupFrom,
           originalPaidFrom,
           originalAmount,
@@ -185,6 +189,7 @@ const CashWithdrawal: React.FC = () => {
                     );
 
         await updateLedger(
+          societyName,
           originalGroupTo,
           originalPaidTo,
           originalAmount,
@@ -193,8 +198,8 @@ const CashWithdrawal: React.FC = () => {
         );
 
         // Apply new ledger updates
-        await updateLedger( groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
-        await updateLedger( groupTo, paidTo, parsedAmount, "Add",formattedDate);
+        await updateLedger(societyName, groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
+        await updateLedger(societyName, groupTo, paidTo, parsedAmount, "Add",formattedDate);
 
         Alert.alert("Success", "Transaction updated successfully!", [
           {
@@ -206,12 +211,12 @@ const CashWithdrawal: React.FC = () => {
         // Generate voucher number and create new transaction
         const voucher = await generateVoucherNumber();
         transaction.voucher = voucher;
-        await addDoc(collection(db, "Transaction"), transaction);
+        await addDoc(collection(db, "Societies", societyName, transactionCollectionName), transaction);
 
         // Update ledger        
         const updatePromises = [];
-        const LedgerUpdate1 = await updateLedger(groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate ); // Update Ledger
-        const LedgerUpdate2 = await updateLedger( groupTo, paidTo, parsedAmount, "Add", formattedDate ); // Update Ledger
+        const LedgerUpdate1 = await updateLedger(societyName,groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate ); // Update Ledger
+        const LedgerUpdate2 = await updateLedger(societyName, groupTo, paidTo, parsedAmount, "Add", formattedDate ); // Update Ledger
         updatePromises.push(
           LedgerUpdate1, LedgerUpdate2
         );

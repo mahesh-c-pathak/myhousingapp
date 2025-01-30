@@ -9,6 +9,8 @@ import { updateLedger } from "../../../utils/updateLedger";
 import { useSociety } from "../../../utils/SocietyContext";
 
 const TransactionDetailScreen = () => {
+  const { societyName } = useSociety();
+  const transactionCollectionName = `Transactions_${societyName}`;
   const router = useRouter();
   const { id, type, voucher, transactionDate, paidFrom, paidTo, amount, narration, groupFrom, groupTo } = useLocalSearchParams();
   const { assetAccounts, liabilityAccounts, incomeAccounts, expenditureAccounts,} = useSociety();
@@ -29,12 +31,13 @@ const TransactionDetailScreen = () => {
             setLoading(true);
             try {
               if (typeof id === "string") {
-                await deleteDoc(doc(db, "Transaction", id));
+                await deleteDoc(doc(db, "Societies", societyName, transactionCollectionName, id));
 
                 if (type == "Expense" || type == "Receipt" || type == "Purchase") {
                   // Update ledger                            
                   // Revert original ledger updates
                   await updateLedger(
+                    societyName,
                     groupTo as string,
                     paidTo as string,
                     parseFloat(amount as string),
@@ -42,6 +45,7 @@ const TransactionDetailScreen = () => {
                     transactionDate as string
                   );
                   await updateLedger(
+                    societyName,
                     groupFrom as string,
                     paidFrom as string,
                     parseFloat(amount as string),
@@ -53,8 +57,8 @@ const TransactionDetailScreen = () => {
                 if (type == "Income") {
                   // Update ledger                            
                  const updatePromises = [];        
-                 const LedgerUpdate1 = await updateLedger( groupFrom as string, paidFrom as string, parseFloat(amount as string), "Subtract",transactionDate as string ); // Update Ledger
-                 const LedgerUpdate2 = await updateLedger( groupTo as string, paidTo as string, parseFloat(amount as string), "Subtract", transactionDate as string ); // Update Ledger       
+                 const LedgerUpdate1 = await updateLedger(societyName, groupFrom as string, paidFrom as string, parseFloat(amount as string), "Subtract",transactionDate as string ); // Update Ledger
+                 const LedgerUpdate2 = await updateLedger(societyName, groupTo as string, paidTo as string, parseFloat(amount as string), "Subtract", transactionDate as string ); // Update Ledger       
                  updatePromises.push(
                    LedgerUpdate1, LedgerUpdate2
                  );
@@ -65,8 +69,8 @@ const TransactionDetailScreen = () => {
            if (type == "Cash-Withdrawal"|| type == "Cash-Deposit" || type == "Journal" || "Cash-To-Cash-Transfer" || "Bank-To-Bank-Transfer") {
             // Update ledger                            
            const updatePromises = [];        
-           const LedgerUpdate1 = await updateLedger(groupFrom as string, paidFrom as string, parseFloat(amount as string), "Add" , transactionDate as string); // Update Ledger
-           const LedgerUpdate2 = await updateLedger( groupTo as string, paidTo as string, parseFloat(amount as string), "Subtract", transactionDate as string ); // Update Ledger       
+           const LedgerUpdate1 = await updateLedger(societyName, groupFrom as string, paidFrom as string, parseFloat(amount as string), "Add" , transactionDate as string); // Update Ledger
+           const LedgerUpdate2 = await updateLedger(societyName, groupTo as string, paidTo as string, parseFloat(amount as string), "Subtract", transactionDate as string ); // Update Ledger       
            updatePromises.push(
              LedgerUpdate1, LedgerUpdate2
            );

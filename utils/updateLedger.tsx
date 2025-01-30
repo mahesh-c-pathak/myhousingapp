@@ -8,10 +8,12 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { db } from "../FirebaseConfig"; // Adjust the path to your FirebaseConfig
+import { db } from "@/FirebaseConfig"; // Adjust the path to your FirebaseConfig
 import { Alert } from "react-native";
 
+
 export const updateLedger = async (
+  societyName: string,
   ledgerGroup: string,
   ledgerAccount: string,
   amount: number,
@@ -19,16 +21,24 @@ export const updateLedger = async (
   date: string // Date in "YYYY-MM-DD" format
 ): Promise<string> => {
   try {
+    
+    // Define dynamic collection names
+    const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`; // Updated collection name
+    const accountsCollectionName = `accounts_${societyName}`; // Updated collection name
+    const balancesCollectionName = `balances_${societyName}`; // Updated collection name
+
     const updateLedgerPromises: Promise<void>[] = [];
 
     // Reference to the balances subcollection
     const balancesCollectionRef = collection(
       db,
-      "ledgerGroupsFinal",
+      "Societies", 
+      societyName,
+      ledgerGroupsCollectionName,
       ledgerGroup,
-      "accounts",
+      accountsCollectionName,
       ledgerAccount,
-      "balances"
+      balancesCollectionName
     );
 
     // Check if a balance document exists for the given date
