@@ -1,22 +1,22 @@
-import React, { useState } from 'react';
-import { Alert, StyleSheet } from 'react-native';
-import { Text, View } from '@/components/Themed';
-import { useSession } from '../../utils/ctx';
-import { getAuth } from 'firebase/auth';
-import { TextInput, Button, Surface } from 'react-native-paper';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import React, { useState } from "react";
+import { Alert, StyleSheet } from "react-native";
+import { Text, View } from "@/components/Themed";
+import { useSession } from "../../utils/ctx";
+import { TextInput, Button, Surface } from "react-native-paper";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { getAuth, sendPasswordResetEmail } from "firebase/auth";
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
 
   const { login, logOut } = useSession();
-  const { currentUser } = getAuth();
+  const auth = getAuth();
 
   const handleFirebaseLogin = async () => {
     const response = await login(email, password);
     if (!response.success) {
-      Alert.alert('Sign In', response.msg);
+      Alert.alert("Sign In", response.msg);
     }
   };
 
@@ -24,11 +24,28 @@ const Login: React.FC = () => {
     await logOut();
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert("Forgot Password", "Please enter your email first.");
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert(
+        "Forgot Password",
+        "Password reset email sent! Check your inbox."
+      );
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome! 🌈</Text>
       <Text style={styles.subtitle}>This is a simple repo</Text>
-      
+
       <Surface style={styles.surface}>
         <TextInput
           label="Email"
@@ -61,6 +78,13 @@ const Login: React.FC = () => {
         >
           Firebase Logout
         </Button>
+        <Button
+          mode="text"
+          onPress={handleForgotPassword}
+          style={styles.forgotButton}
+        >
+          Forgot Password?
+        </Button>
       </Surface>
     </View>
   );
@@ -71,18 +95,18 @@ export default Login;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 20,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
     marginBottom: 20,
   },
   subtitle: {
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 20,
   },
   surface: {
@@ -95,5 +119,9 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 10,
+  },
+  forgotButton: {
+    marginTop: 10,
+    alignSelf: "center",
   },
 });

@@ -1,7 +1,14 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
 
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../FirebaseConfig";
+import { useSession } from "./ctx"; // Import session context
 
 interface SocietyContextProps {
   societyName: string;
@@ -19,11 +26,11 @@ interface SocietyContextProps {
   incomeAccounts: string[];
   expenditureAccounts: string[];
   fetchFinancialData: () => Promise<void>;
-};
+}
 
-
-
-const SocietyContext = createContext<SocietyContextProps | undefined>(undefined);
+const SocietyContext = createContext<SocietyContextProps | undefined>(
+  undefined
+);
 
 export const useSociety = () => {
   const context = useContext(SocietyContext);
@@ -32,13 +39,14 @@ export const useSociety = () => {
   }
   return context;
 };
- 
+
 export const SocietyProvider = ({ children }: { children: ReactNode }) => {
+  const { isAuthenticated } = useSession(); // Get authentication status
   const [societyName, setSocietyName] = useState<string>("");
-  const [wing, setWing] = useState<string>('');
-  const [floorName, setFloorName] = useState<string>('');
-  const [flatNumber, setFlatNumber] = useState<string>('');
-  const [userType, setUserType] = useState<string>('');
+  const [wing, setWing] = useState<string>("");
+  const [floorName, setFloorName] = useState<string>("");
+  const [flatNumber, setFlatNumber] = useState<string>("");
+  const [userType, setUserType] = useState<string>("");
   const [assetAccounts, setAssetAccounts] = useState<string[]>([]);
   const [liabilityAccounts, setLiabilityAccounts] = useState<string[]>([]);
   const [incomeAccounts, setIncomeAccounts] = useState<string[]>([]);
@@ -67,12 +75,9 @@ export const SocietyProvider = ({ children }: { children: ReactNode }) => {
     "Sundry Debtors",
   ];
 
-  const incomeCategories  = [
-    "Direct Income",
-    "Indirect Income",
-  ];
+  const incomeCategories = ["Direct Income", "Indirect Income"];
 
-  const expenditureCategories  = [
+  const expenditureCategories = [
     "Direct Expenses",
     "Indirect Expenses",
     "Maintenance & Repairing",
@@ -80,6 +85,7 @@ export const SocietyProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchFinancialData = async () => {
     try {
+      if (!isAuthenticated) return; // Ensure user is authenticated before fetching
       const querySnapshot = await getDocs(collection(db, "ledgerGroupsNew"));
       const ledgerGroups: { name: string; accounts: string[] }[] = [];
 
@@ -115,29 +121,36 @@ export const SocietyProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    fetchFinancialData();
-  }, []);
+    if (isAuthenticated) {
+      fetchFinancialData();
+    }
+  }, [isAuthenticated]);
 
-
+  // Prevent rendering context if authentication is still being determined
+  if (typeof isAuthenticated === "undefined") {
+    return null; // Show nothing until authentication is confirmed
+  }
 
   return (
-    <SocietyContext.Provider value={{
-       societyName,
-       wing,
-       floorName,
-       flatNumber,
-       userType, 
-       setSocietyName,
-       setWing,
-       setFloorName,
-       setFlatNumber,
-       setUserType,
-       assetAccounts,
-       liabilityAccounts,
-       incomeAccounts,
-       expenditureAccounts,
-       fetchFinancialData, 
-       }}>
+    <SocietyContext.Provider
+      value={{
+        societyName,
+        wing,
+        floorName,
+        flatNumber,
+        userType,
+        setSocietyName,
+        setWing,
+        setFloorName,
+        setFlatNumber,
+        setUserType,
+        assetAccounts,
+        liabilityAccounts,
+        incomeAccounts,
+        expenditureAccounts,
+        fetchFinancialData,
+      }}
+    >
       {children}
     </SocietyContext.Provider>
   );

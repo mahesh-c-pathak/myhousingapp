@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import { View, StyleSheet, FlatList, TouchableOpacity } from "react-native";
 import { Appbar, Card, Text, Divider, Avatar } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useSociety } from "../../../../utils/SocietyContext";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
-import { db } from "../../../../FirebaseConfig";
+import { useSociety } from "@/utils/SocietyContext";
+
+import { db } from "@/FirebaseConfig";
+import { collection, getDocs, doc, getDoc, query, where,  orderBy, limit } from "firebase/firestore";
 
 const Wallet = () => {
   const router = useRouter();
@@ -12,7 +13,8 @@ const Wallet = () => {
     const localParams = useLocalSearchParams();
     const societyContext = useSociety();
     const [totalDue, setTotalDue] = useState(0);
-  
+    
+    
     // Determine params based on source
     const societyName =
       source === "Admin" ? localParams.societyName : societyContext.societyName;
@@ -27,13 +29,97 @@ const Wallet = () => {
     const [currentBalance, setCurrentBalance] = useState<number>(0);
     const [unclearedBalance, setUnclearedBalance] = useState<number>(0); // NEW STATE
 
+    const customWingsSubcollectionName = `${societyName} wings`;
+    const customFloorsSubcollectionName = `${societyName} floors`;
+    const customFlatsSubcollectionName = `${societyName} flats`;
+    const customFlatsBillsSubcollectionName = `${societyName} bills`;
+    const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`
 
     useEffect(() => {
         fetchBills();
       }, []);
 
-     // Fetch and filter bills for the specific flat
       const fetchBills = async () => {
+        try {
+          // Construct Firestore references
+          const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
+          const flatDocRef = doc(db, flatRef);
+          const dateString = new Date().toISOString().split('T')[0];
+          
+          const billsCollectionRef = collection(flatDocRef, customFlatsBillsSubcollectionName);
+          const unclearedBalanceRef = collection(flatDocRef, unclearedBalanceSubcollectionName);
+          const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`
+          const currentBalanceSubcollection = collection(flatDocRef, currentBalanceSubcollectionName);
+          const currentBalancequery = query(currentBalanceSubcollection, where("date", "<=", dateString), orderBy("date", "desc"), limit(1));
+      
+          // Fetch both collections in parallel
+          const [unclearedSnapshot, billsSnapshot, currentBalancesnapshot] = await Promise.all([
+            getDocs(unclearedBalanceRef),
+            getDocs(billsCollectionRef),
+            getDocs(currentBalancequery)
+          ]);
+
+          // set current balance
+          if (!currentBalancesnapshot.empty) {
+            const data = currentBalancesnapshot.docs[0].data();
+            setCurrentBalance(data.cumulativeBalance);  // Use cumulativeBalance or default to 0
+          }
+      
+          let totalUnclearedBalance = 0;
+          let totalUnpaidDue = 0;
+          const balanceData: any[] = [];
+          const billsData: any[] = [];
+      
+          // Process Uncleared Balance Data
+          unclearedSnapshot.forEach((doc) => {
+            const docData = doc.data();
+            const { status, type, voucherNumber, paymentReceivedDate, amount, amountPaid, transactionId } = docData;
+      
+            if (status === "Cleared") {
+              balanceData.push({
+                id: `${voucherNumber}- ${type}` || `${Math.random()}`, // Ensure ID is unique,
+                title: type === "Refund" ? "Refund Money" : "Add Money",
+                dueDate: paymentReceivedDate,
+                amount,
+                type,
+              });
+            } else if (status === "Uncleared") {
+              totalUnclearedBalance += amountPaid || 0;
+            }
+          });
+      
+          // Process Bills Data
+          billsSnapshot.forEach((doc) => {
+            const docData = doc.data();
+            const { status, amount = 0, voucherNumber, name, paymentDate } = docData;
+      
+            if (status === "unpaid") {
+              totalUnpaidDue += amount; // Accumulate unpaid dues
+            } else if (status === "paid") {
+              billsData.push({
+                id: voucherNumber || `${voucherNumber}-${Math.random()}`, // Ensure ID is unique,,
+                title: `Paid bill for ${name}`,
+                dueDate: paymentDate,
+                amount,
+                status,
+                type: "Paid bill",
+              });
+            }
+          });
+      
+          // Update states
+          setUnclearedBalance(totalUnclearedBalance);
+          setTotalDue(totalUnpaidDue);
+          setMyStatementData([...billsData, ...balanceData]);
+      
+        } catch (error) {
+          console.error("Error fetching bills and balance data:", error);
+        }
+      };
+      
+
+     // Fetch and filter bills for the specific flat
+      const fetchBillsOld = async () => {
         try {
           const societiesDocRef = doc(db, "Societies", societyName as string);
           const societyDocSnap = await getDoc(societiesDocRef);
@@ -100,7 +186,7 @@ const Wallet = () => {
           if (relevantWing.Refund) {
             relevantWing.Refund.forEach((entry: any) => {
               refundData.push({
-                id: entry.voucherNumber,
+                id: entry.voucherNumber || `${entry.type}-${Math.random()}`,
                 title: "Refund Money",
                 dueDate: entry.paymentDate,
                 amount: entry.amount,
@@ -115,7 +201,7 @@ const Wallet = () => {
             relevantWing.Advance.forEach((entry: any) => {
               const dueDate = new Date(entry.paymentDate.seconds * 1000).toISOString().split("T")[0]; // Convert timestamp to date-only string
               advanceData.push({
-                id: entry.voucherNumber,
+                id: entry.voucherNumber || `${entry.type}-${Math.random()}`, // Ensure ID is unique,
                 title: "Add Money",
                 dueDate,
                 amount: entry.amount, 
@@ -192,7 +278,7 @@ const Wallet = () => {
 
 
 
-
+ 
 
   return (
     <View style={styles.container}>

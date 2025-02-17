@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ScrollView, Alert } from "react-native";
-import { Text, Card, Button, Divider, TextInput, Chip, Appbar } from "react-native-paper";
+import {
+  Text,
+  Card,
+  Button,
+  Divider,
+  TextInput,
+  Chip,
+  Appbar,
+} from "react-native-paper";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
 import { useRouter, Stack } from "expo-router";
+import AppbarComponent from "@/components/AppbarComponent";
+import AppbarMenuComponent from "@/components/AppbarMenuComponent";
 
 interface Transaction {
   paidFrom: string;
@@ -34,7 +44,10 @@ const IncomeAndExpenditureScreen: React.FC = () => {
 
         // Fetch Income Accounts
         const fromQuerySnapshot = await getDocs(
-          query(ledgerGroupsRef, where("name", "in", ["Direct Income", "Indirect Income"]))
+          query(
+            ledgerGroupsRef,
+            where("name", "in", ["Direct Income", "Indirect Income"])
+          )
         );
         const fromAccounts = fromQuerySnapshot.docs
           .map((doc) => doc.data().accounts || [])
@@ -90,7 +103,7 @@ const IncomeAndExpenditureScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    console.log('IncomeOptions',IncomeOptions)
+    console.log("IncomeOptions", IncomeOptions);
   }, [IncomeOptions]);
 
   useEffect(() => {
@@ -153,95 +166,118 @@ const IncomeAndExpenditureScreen: React.FC = () => {
 
   const totalIncome = incomeData.reduce((sum, item) => sum + item.amount, 0);
   const totalExpenses = expenseData.reduce((sum, item) => sum + item.amount, 0);
- 
+
+  const [menuVisible, setMenuVisible] = useState(false);
+  const handleMenuOptionPress = (option: string) => {
+    console.log(`${option} selected`);
+    if (option === "Download PDF") {
+      generatePDF();
+    }
+    setMenuVisible(false);
+  };
+  const closeMenu = () => {
+    setMenuVisible(false);
+  };
+
+  const generatePDF = async () => {
+    console.log("Generate PDF pressed");
+  };
+
   return (
     <View style={styles.container}>
+      {/* Top Appbar */}
+      <AppbarComponent
+        title="Income And Expenditure"
+        source="Admin"
+        onPressThreeDot={() => setMenuVisible(!menuVisible)}
+      />
 
-      {/* Appbar Header */}
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-        <Appbar.Content title="Income And Expenditure" titleStyle={styles.titleStyle} />
-        
-        <Appbar.Action icon="dots-vertical" onPress={() => {}} color="#fff" />
-      </Appbar.Header>
-
-    
-    <ScrollView style={styles.scrollcontainer}>
-      {/* Header Section */}
-      <View style={styles.scrollheader}>
-        <Chip mode="outlined">FY: 2023-24</Chip>
-        <Chip mode="outlined">FY: 2022-23</Chip>
-        <Chip mode="outlined">FY: 2021-22</Chip>
-        <Chip mode="outlined">FY: 2020-21</Chip>
-      </View>
-
-      {/* Date Range Section */}
-      <View style={styles.dateSection}>
-        <TextInput
-          mode="outlined"
-          label="Start Date"
-          value={startDate}
-          onChangeText={setStartDate}
-          style={styles.dateInput}
+      {/* Three-dot Menu */}
+      {/* Custom Menu */}
+      {menuVisible && (
+        <AppbarMenuComponent
+          items={["Download PDF"]}
+          onItemPress={handleMenuOptionPress}
+          closeMenu={closeMenu}
         />
-        <TextInput
-          mode="outlined"
-          label="End Date"
-          value={endDate}
-          onChangeText={setEndDate}
-          style={styles.dateInput}
-        />
-        <Button mode="contained" style={styles.goButton}>
-          Go
-        </Button>
-      </View>
+      )}
 
-      {/* Bank and Cash Details */}
-      <View style={styles.cardSection}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text>Bank</Text>
-            <Text>Opening Bal: ₹ 0.00</Text>
-            <Text>Closing Bal: ₹ -29000.00</Text>
-          </Card.Content>
-        </Card>
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text>Cash</Text>
-            <Text>Opening Bal: ₹ 0.00</Text>
-            <Text>Closing Bal: ₹ -3500.00</Text>
-          </Card.Content>
-        </Card>
-      </View>
-
-      {/* Income Section */}
-      <Text style={styles.sectionTitle}>Income</Text>
-      <Divider />
-      {incomeData.map((item, index) => (
-        <View style={styles.row} key={index}>
-          <Text style={styles.category}>{item.account}</Text>
-          <Text style={styles.amount}>₹ {item.amount.toFixed(2)}</Text>
+      <ScrollView style={styles.scrollcontainer}>
+        {/* Header Section */}
+        <View style={styles.scrollheader}>
+          <Chip mode="outlined">FY: 2023-24</Chip>
+          <Chip mode="outlined">FY: 2022-23</Chip>
+          <Chip mode="outlined">FY: 2021-22</Chip>
+          <Chip mode="outlined">FY: 2020-21</Chip>
         </View>
-      ))}
-      <View style={styles.totalRow}>
-        <Text style={styles.totalLabel}>Total Amount</Text>
-        <Text style={styles.totalAmount}>₹ {totalIncome.toFixed(2)}</Text>
-      </View>
 
-      {/* Expense Section */}
-      <Text style={styles.sectionTitle}>Expense</Text>
-      <Divider />
-      {expenseData.map((item, index) => (
-        <View style={styles.row} key={index}>
-          <Text style={styles.category}>{item.account}</Text>
-          <Text style={styles.amount}>₹ {item.amount.toFixed(2)}</Text>
+        {/* Date Range Section */}
+        <View style={styles.dateSection}>
+          <TextInput
+            mode="outlined"
+            label="Start Date"
+            value={startDate}
+            onChangeText={setStartDate}
+            style={styles.dateInput}
+          />
+          <TextInput
+            mode="outlined"
+            label="End Date"
+            value={endDate}
+            onChangeText={setEndDate}
+            style={styles.dateInput}
+          />
+          <Button mode="contained" style={styles.goButton}>
+            Go
+          </Button>
         </View>
-      ))}
-      <View style={styles.totalRow}>
-        <Text style={styles.totalLabel}>Total Amount</Text>
-        <Text style={styles.totalAmount}>₹ {totalExpenses.toFixed(2)}</Text>
-      </View>
-    </ScrollView>
+
+        {/* Bank and Cash Details */}
+        <View style={styles.cardSection}>
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text>Bank</Text>
+              <Text>Opening Bal: ₹ 0.00</Text>
+              <Text>Closing Bal: ₹ -29000.00</Text>
+            </Card.Content>
+          </Card>
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text>Cash</Text>
+              <Text>Opening Bal: ₹ 0.00</Text>
+              <Text>Closing Bal: ₹ -3500.00</Text>
+            </Card.Content>
+          </Card>
+        </View>
+
+        {/* Income Section */}
+        <Text style={styles.sectionTitle}>Income</Text>
+        <Divider />
+        {incomeData.map((item, index) => (
+          <View style={styles.row} key={index}>
+            <Text style={styles.category}>{item.account}</Text>
+            <Text style={styles.amount}>₹ {item.amount.toFixed(2)}</Text>
+          </View>
+        ))}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total Amount</Text>
+          <Text style={styles.totalAmount}>₹ {totalIncome.toFixed(2)}</Text>
+        </View>
+
+        {/* Expense Section */}
+        <Text style={styles.sectionTitle}>Expense</Text>
+        <Divider />
+        {expenseData.map((item, index) => (
+          <View style={styles.row} key={index}>
+            <Text style={styles.category}>{item.account}</Text>
+            <Text style={styles.amount}>₹ {item.amount.toFixed(2)}</Text>
+          </View>
+        ))}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total Amount</Text>
+          <Text style={styles.totalAmount}>₹ {totalExpenses.toFixed(2)}</Text>
+        </View>
+      </ScrollView>
     </View>
   );
 };

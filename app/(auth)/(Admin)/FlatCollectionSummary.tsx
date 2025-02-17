@@ -37,6 +37,8 @@ interface UnclearedBalance {
     chequeNo:string;
     status:string;
     selectedIds:any;
+    selectedBillsProperties:any;
+    
     
 }
 
@@ -115,6 +117,7 @@ const FlatCollectionSummary = () => {
                 chequeNo: data.chequeNo || "",
                 status: data.status || "Uncleared",
                 selectedIds: data.selectedIds || [],
+                selectedBillsProperties: data.selectedBills || []
                 };
             });
   
@@ -243,6 +246,7 @@ const FlatCollectionSummary = () => {
                 totalDue: totalDue.toFixed(2),
                 currentBalance: currentBalance.toFixed(2),
                 unclearedBalance: totalUncleared.toFixed(2),
+                
             },
           });
     }
@@ -315,6 +319,8 @@ const FlatCollectionSummary = () => {
                     selectedIds: JSON.stringify(item.selectedIds),
                     bankName:item.bankName,
                     chequeNo:item.chequeNo,
+                    selectedBillsProperties: JSON.stringify(item.selectedBillsProperties)
+                    
                     // Add other necessary params if available
                 },
             }); 

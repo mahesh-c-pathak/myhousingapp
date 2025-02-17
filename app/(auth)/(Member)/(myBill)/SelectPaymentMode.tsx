@@ -5,13 +5,13 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 
 const SelectPaymentMode = () => {
   const router = useRouter();
-  const { amountPayable, selectedIds } = useLocalSearchParams();
+  const { amountPayable, selectedIds, selectedBills } = useLocalSearchParams();
 
   // Function to handle navigation to the payment mode screen
   const navigateToPaymentMode = (mode: string) => {
     router.push({
       pathname: "/[paymentmode]",
-      params: { paymentMode: mode, amount:amountPayable, selectedIds },
+      params: { paymentMode: mode, amount:amountPayable, selectedIds, selectedBills },
     });
   };
 

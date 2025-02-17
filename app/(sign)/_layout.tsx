@@ -1,7 +1,7 @@
-import { Redirect, Stack } from 'expo-router';
+import { Redirect, Stack } from "expo-router";
 
-import { useSession } from '../../utils/ctx';
-import { Text } from '@/components/Themed';
+import { useSession } from "../../utils/ctx";
+import { Text } from "@/components/Themed";
 
 export default function AppLayout() {
   const { session, isLoading } = useSession();
@@ -12,16 +12,12 @@ export default function AppLayout() {
 
   // Only require authentication within the (app) group's layout as users
   // need to be able to access the (auth) group and sign in again.
-  
 
   return (
     <Stack>
       <Stack.Screen name="landing" options={{ headerShown: false }} />
-      <Stack.Screen name="login" options={{ presentation: "modal" }} />
-      <Stack.Screen name="signup" options={{ presentation: "modal" }} />
-      
-      
-      
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="signup" options={{ headerShown: false }} />
     </Stack>
-  )
+  );
 }

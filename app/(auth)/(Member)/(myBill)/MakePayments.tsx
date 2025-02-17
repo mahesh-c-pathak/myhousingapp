@@ -5,7 +5,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 
 const MakePayments = () => {
   const router = useRouter();
-  const { totalAmount, selectedIds, totalDue, currentBalance, unclearedBalance } = useLocalSearchParams();
+  const { totalAmount, selectedIds, totalDue, currentBalance, unclearedBalance, selectedBills } = useLocalSearchParams();
 
   
 
@@ -77,6 +77,7 @@ const MakePayments = () => {
             params: {
               amountPayable: amount.toFixed(2),
               selectedIds,
+              selectedBills,
             },
             });
         }}

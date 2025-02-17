@@ -3,8 +3,10 @@ import { View, StyleSheet, FlatList, TouchableOpacity } from "react-native";
 import { Appbar, Button, Card, Text, TouchableRipple, Avatar, Checkbox, Divider } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSociety } from "../../../../utils/SocietyContext";
-import { collection, getDocs, doc, getDoc, query, where  } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where, orderBy, limit} from "firebase/firestore";
 import { db } from "../../../../FirebaseConfig";
+
+import {calculatePenaltyNew} from "@/utils/calculatePenaltyNew"
 
 interface BillsData {
     id: string;
@@ -16,7 +18,20 @@ interface BillsData {
     overdueDays: number; // Include overdueDays
     amount: number; // Include amount
     status: string; // Include status (e.g., 'unpaid', 'paid', etc.)
+    isEnablePenalty?: boolean; // Add this
+    Occurance?: string; // Add this
+    recurringFrequency?: string; // Add this
+    penaltyType?: string; // Add this
+    fixPricePenalty?: string; // Add this
+    percentPenalty?: string; // Add this
+    ledgerAccountPenalty?: string; // Add this
+    ledgerAccountGroupPenalty?: string; // Add this
+    penaltyAmount?: number;
+    amountToPay?: number;
+    receiptAmount?: number;
   }
+
+ 
 
 const index = () => {
   const [bills, setBills] = useState<BillsData[]>([]);
@@ -29,6 +44,7 @@ const index = () => {
   const localParams = useLocalSearchParams();
   const societyContext = useSociety();
   const [currentBalance, setCurrentBalance] = useState<number>(0);
+  const [deposit, setDeposit] = useState<number>(0);
 
   // Determine params based on source
   const societyName =
@@ -45,8 +61,9 @@ const index = () => {
     const customFlatsSubcollectionName = `${societyName} flats`;
     const customFlatsBillsSubcollectionName = `${societyName} bills`;
 
-    const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`
-
+    const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+    const specialBillCollectionName = `specialBills_${societyName}`;
+ 
   useEffect(() => {
     fetchBills();
     fetchUnclearedBalance(); // Fetch uncleared balance   
@@ -61,25 +78,96 @@ const index = () => {
         const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
         const flatDocRef = doc(db, flatRef);
         const billsCollectionRef = collection(flatDocRef, customFlatsBillsSubcollectionName);
-        const flatbillCollection = await getDocs(billsCollectionRef);
+        
+        const dateString = new Date().toISOString().split('T')[0];
+        const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`
+        const currentBalanceSubcollection = collection(flatDocRef, currentBalanceSubcollectionName);
+        const currentBalancequery = query(currentBalanceSubcollection, where("date", "<=", dateString), orderBy("date", "desc"), limit(1));
+        
+        const depositSubcollectionName = `deposit_${flatNumber}`
+        const depositCollection = collection(flatDocRef, depositSubcollectionName);
+        const depositQuery = query(depositCollection, where("date", "<=", dateString), orderBy("date", "desc"), limit(1));
 
-        flatbillCollection.forEach((billDoc) => {
-          const billData = billDoc.data();
-          const billStatus = billData.status;
-          const billAmount = billData.amount || 0;
+         // Fetch both collections in parallel
+          const [ flatbillCollection, currentBalancesnapshot,depositsnapshot ] = await Promise.all([
+                    getDocs(billsCollectionRef),
+                    getDocs(currentBalancequery),
+                    getDocs(depositQuery),
+                  ]);
 
+          // set current balance
+          if (!currentBalancesnapshot.empty) {
+            const data = currentBalancesnapshot.docs[0].data();
+            setCurrentBalance(data.cumulativeBalance);  // Use cumulativeBalance or default to 0
+          }
 
-          billsData.push({
-            id: billDoc.id,
-            title: billData.name || "My bill",
-            dueDate: billData.dueDate,
-            overdueDays: calculateOverdueDays(billData.dueDate),
-            amount: billAmount,
-            status: billStatus,
-          });
-        });
+          // set Deposit
+          if (!depositsnapshot.empty) {
+            const data = depositsnapshot.docs[0].data();
+            setDeposit(data.cumulativeBalance);  // Use cumulativeBalance or default to 0
+          }
 
-        setBills(billsData);
+         // Use `for...of` instead of `.forEach()` to support `await`
+            for (const billDoc of flatbillCollection.docs) {
+              const billData = billDoc.data();
+              const billStatus = billData.status;
+              const billAmount = billData.amount || 0;
+
+              // Construct bill object
+              const billObject: BillsData = {
+                id: billDoc.id,
+                title: billData.name || "My bill",
+                dueDate: billData.dueDate,
+                overdueDays: calculateOverdueDays(billData.dueDate, billData.paymentDate),
+                amount: billAmount,
+                status: billStatus,
+              };
+
+              if (billStatus !== "paid") {
+                const billRef = `Societies/${societyName}/${specialBillCollectionName}/${billDoc.id}`;
+                const billMainDocRef = doc(db, billRef);
+                const billMainDocSnap = await getDoc(billMainDocRef);
+
+                if (billMainDocSnap.exists()) {
+                  const billMainData = billMainDocSnap.data();
+
+                  // Add penalty-related fields to the billObject
+                  billObject.isEnablePenalty = billMainData.isEnablePenalty === "true"; // Convert string to boolean
+                  billObject.Occurance = billMainData.Occurance ?? "";
+                  billObject.recurringFrequency = billMainData.recurringFrequency ?? "";
+                  billObject.penaltyType = billMainData.penaltyType ?? "";
+                  billObject.fixPricePenalty = billMainData.fixPricePenalty ?? "";
+                  billObject.percentPenalty = billMainData.percentPenalty ?? "";
+                  billObject.ledgerAccountPenalty = billMainData.ledgerAccountPenalty ?? "";
+                  billObject.ledgerAccountGroupPenalty = billMainData.ledgerAccountGroupPenalty ?? "";
+                   // Determine penalty parameters
+                  const penaltyOccurrence = billMainData.Occurance === "Recurring" ? "Recurring" : "One Time";
+                  const penaltyRecurringFrequency = penaltyOccurrence === "Recurring" ? billMainData.recurringFrequency : null;
+                  const penaltyValue = billMainData.penaltyType === "Percentage" ? parseFloat(billMainData.percentPenalty) : parseFloat(billMainData.fixPricePenalty);
+                    // Convert dueDate string to Date object
+                  const dueDate = new Date(billData.dueDate);
+                  
+                  // Calculate penalty
+                  billObject.penaltyAmount = calculatePenaltyNew(
+                    dueDate,
+                    billAmount,
+                    penaltyOccurrence,
+                    penaltyRecurringFrequency,
+                    billMainData.penaltyType,
+                    penaltyValue,
+                  );
+                  billObject.amountToPay = billAmount + billObject.penaltyAmount;
+                }
+              } else if (billStatus === "paid") {
+                billObject.overdueDays = billData.overdueDays || 0;
+                billObject.receiptAmount = billData.receiptAmount || 0;
+                billObject.penaltyAmount = billData.penaltyAmount || 0;
+              }
+
+              billsData.push(billObject);
+            }
+
+            setBills(billsData);
         
       } catch (error) {
         console.error("Error fetching bills:", error);
@@ -107,20 +195,19 @@ const index = () => {
     
         // Update the state with the calculated total
         setUnclearedBalance(totalUnclearedBalance);
-        console.log(`Total uncleared balance: ${totalUnclearedBalance}`);
+  
       } catch (error) {
         console.error("Error fetching uncleared balance:", error);
       }
     };
+
     
-
-
-  const calculateOverdueDays = (dueDate: string) => {
-    const due = new Date(dueDate);
-    const today = new Date();
-    const diffTime = today.getTime() - due.getTime();
-    return Math.max(Math.floor(diffTime / (1000 * 60 * 60 * 24)), 0);
-  };
+    const calculateOverdueDays = (dueDate: string, paymentDate?: string) => {
+      const referenceDate = paymentDate ? new Date(paymentDate) : new Date();
+      const due = new Date(dueDate);
+      const diffTime = referenceDate.getTime() - due.getTime();
+      return Math.max(Math.floor(diffTime / (1000 * 60 * 60 * 24)), 0);
+    };
 
   const toggleSelection = (id: string) => {
     setSelectedBills((prev) =>
@@ -128,6 +215,7 @@ const index = () => {
     );
   };
 
+  
 
   const renderBillItem = ({ item }: { item: any }) => {
     if (
@@ -150,13 +238,41 @@ const index = () => {
               status={isSelected ? "checked" : "unchecked"}
               onPress={() => toggleSelection(item.id)}
             />
-            <View>
+            <View style={{ flex: 1,  }}>
               <Text style={styles.billTitle}>{item.title}</Text>
-              <Text style={styles.overdue}>Overdue by {item.overdueDays} days</Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text >Bill Amount</Text>
+                <Text style={styles.amountText}>₹ {item.amount.toFixed(2)}</Text>
+              </View>
               <Text style={styles.dueDate}>Due Date: {item.dueDate}</Text>
-              
+              {item.overdueDays > 0 && item.status !== "paid" && (
+                <>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text >Penalty</Text>
+                <Text style={styles.amountText}>₹ {item.penaltyAmount}</Text>
+              </View> 
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text >Amount To Be Paid</Text>
+                <Text style={styles.amountText}>₹ {item.amountToPay}</Text>
+              </View>
+              <Text style={styles.overdue}>Overdue by {item.overdueDays} days</Text>
+              </>
+            )}
+            {item.status === "paid" && (
+              <>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text >Penalty</Text>
+                <Text style={styles.amountText}>₹ {item.penaltyAmount}</Text>
+              </View> 
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text >Amount Paid</Text>
+                <Text style={styles.amountText}>₹ {item.receiptAmount.toFixed(2)}</Text>
+              </View>
+              </>
+            )}
+
             </View>
-            <Text style={styles.amount}>₹ {item.amount.toFixed(2)}</Text>
+            
           </View>
         </Card.Content>
       </Card>
@@ -167,11 +283,11 @@ const index = () => {
     
   const totalDue = bills
         .filter((b) => b.status === "unpaid")
-        .reduce((sum, b) => sum + b.amount, 0);
+        .reduce((sum, b) => sum + (b.amountToPay ?? b.amount), 0);
 
   const handlePayNow = () => {
     const selectedItems = bills.filter((bill) => selectedBills.includes(bill.id));
-    const totalAmount = selectedItems.reduce((sum, bill) => sum + bill.amount, 0);
+    const totalAmount = selectedItems.reduce((sum, bill) => sum + (bill.amountToPay ?? bill.amount), 0);
     
     //const unclearedBalance = 0; // Replace with actual uncleared balance logic if needed
 
@@ -183,6 +299,7 @@ const index = () => {
         totalDue: totalDue.toFixed(2),
         currentBalance: currentBalance.toFixed(2),
         unclearedBalance: unclearedBalance.toFixed(2),
+        selectedBills: JSON.stringify(selectedItems), // Pass all selected bill details
       },
     });
   };
@@ -206,6 +323,10 @@ const index = () => {
         <View style={styles.summaryItem}>
           <Text style={styles.summaryTitle}>Current Balance</Text>
           <Text style={styles.summaryValue}>₹ {currentBalance.toFixed(2)}</Text>
+        </View>
+        <View style={styles.summaryItem}>
+            <Text style={styles.summaryTitle}>Deposit</Text>
+            <Text style={styles.summaryValue}>₹ {deposit.toFixed(2)}</Text>
         </View>
         <View style={styles.summaryItem}>
           <Text style={styles.summaryTitle}>Uncleared Balance</Text>
@@ -317,6 +438,7 @@ const styles = StyleSheet.create({
   card: { marginVertical: 8 },
   billTitle: { fontWeight: "bold", fontSize: 16 },
   overdue: { color: "red", fontSize: 12 },
+  amountText: {color: "red", fontSize: 16},
   dueDate: { color: "#555", fontSize: 12 },
   amount: {
     position: "absolute",

@@ -1,19 +1,36 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, ScrollView, View, ActivityIndicator, TouchableOpacity, Modal, Alert } from 'react-native';
-import { Appbar, Card, Text, FAB, Divider, Button } from 'react-native-paper';
-import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
-import { db } from '../../../FirebaseConfig';
+import React, { useEffect, useState } from "react";
+import {
+  StyleSheet,
+  ScrollView,
+  View,
+  ActivityIndicator,
+  TouchableOpacity,
+  Modal,
+  Alert,
+  TouchableWithoutFeedback,
+} from "react-native";
+import { Appbar, Card, Text, FAB, Divider, Button } from "react-native-paper";
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+  where,
+} from "firebase/firestore";
+import { db } from "../../../FirebaseConfig";
 import { useRouter, useLocalSearchParams } from "expo-router";
 
 import Dropdown from "../../../utils/DropDown";
 import PaymentDatePicker from "../../../utils/paymentDate";
-import { transactionFromToGroupList } from '../../../components/LedgerGroupList'; // Import the array
+import { transactionFromToGroupList } from "../../../components/LedgerGroupList"; // Import the array
 import { fetchAccountList } from "../../../utils/acountFetcher";
 // Import the date formatter utility
 import { formatDateIntl, formatDate } from "../../../utils/dateFormatter";
 import { fetchLatestBalanceBeforeDate } from "@/utils/fetchbalancefromdatabase";
 import { useSociety } from "@/utils/SocietyContext";
- 
+import AppbarComponent from "@/components/AppbarComponent";
+import AppbarMenuComponent from "@/components/AppbarMenuComponent";
 
 interface Transaction {
   id: string;
@@ -39,61 +56,82 @@ const TransactionScreen = () => {
 
   const [openingCashBalance, setOpeningCashBalance] = useState<number>(0);
   const [closingCashBalance, setClosingCashBalance] = useState<number>(0);
-  
-  
+
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   // Modal and Filter States
-    const [isModalVisible, setIsModalVisible] = useState(false);
-    
-    const [toDate, setToDate] = useState(new Date(Date.now()));
-    const [ledgerOptions, setLedgerOptions] = useState<{ label: string; value: string }[]>([]);
-    const [ledger, setLedger] = useState<any>("All");
+  const [isModalVisible, setIsModalVisible] = useState(false);
 
-    // Get the current date and set it to the 1st of the current month
-        const getFirstDayOfMonth = () => {
-          const now = new Date();
-          return new Date(now.getFullYear(), now.getMonth(), 1);
-        };
-        const [fromDate, setFromDate] = useState(getFirstDayOfMonth());
-    
-                
-          const [formattedDate, setFormattedDate] = useState(formatDate(fromDate));
-          const [formattedToDate, setFormattedToDate] = useState(formatDate(toDate));
+  const [toDate, setToDate] = useState(new Date(Date.now()));
+  const [ledgerOptions, setLedgerOptions] = useState<
+    { label: string; value: string }[]
+  >([]);
+  const [ledger, setLedger] = useState<any>("All");
 
+  // Get the current date and set it to the 1st of the current month
+  const getFirstDayOfMonth = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  };
+  const [fromDate, setFromDate] = useState(getFirstDayOfMonth());
 
-          useEffect(() => {
-            const fetchbalances = async()=>{
-              const balancebank = await fetchLatestBalanceBeforeDate(societyName, "Bank Accounts", "Bank", formattedDate);
-              setOpeningBankBalance(balancebank);
-              const balanceCash = await fetchLatestBalanceBeforeDate(societyName,"Cash in Hand", "Cash", formattedDate);
-              setOpeningCashBalance(balanceCash);
+  const [formattedDate, setFormattedDate] = useState(formatDate(fromDate));
+  const [formattedToDate, setFormattedToDate] = useState(formatDate(toDate));
 
-              const balancebankfordate = await fetchLatestBalanceBeforeDate(societyName,"Bank Accounts", "Bank", formattedToDate);
-              setClosingBankBalance(balancebankfordate);
-              
-              const balanceclosefordate = await fetchLatestBalanceBeforeDate(societyName,"Cash in Hand", "Cash", formattedToDate);
-              setClosingCashBalance(balanceclosefordate);
-            };
-            fetchbalances()
-          }, []);
+  useEffect(() => {
+    const fetchbalances = async () => {
+      const balancebank = await fetchLatestBalanceBeforeDate(
+        societyName,
+        "Bank Accounts",
+        "Bank",
+        formattedDate
+      );
+      setOpeningBankBalance(balancebank);
+      const balanceCash = await fetchLatestBalanceBeforeDate(
+        societyName,
+        "Cash in Hand",
+        "Cash",
+        formattedDate
+      );
+      setOpeningCashBalance(balanceCash);
 
+      const balancebankfordate = await fetchLatestBalanceBeforeDate(
+        societyName,
+        "Bank Accounts",
+        "Bank",
+        formattedToDate
+      );
+      setClosingBankBalance(balancebankfordate);
 
+      const balanceclosefordate = await fetchLatestBalanceBeforeDate(
+        societyName,
+        "Cash in Hand",
+        "Cash",
+        formattedToDate
+      );
+      setClosingCashBalance(balanceclosefordate);
+    };
+    fetchbalances();
+  }, []);
 
   // Fetch transactions from Firebase
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db,"Societies", societyName, transactionCollectionName));
-        const fetchedTransactions: Transaction[] = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Transaction[];
+        const querySnapshot = await getDocs(
+          collection(db, "Societies", societyName, transactionCollectionName)
+        );
+        const fetchedTransactions: Transaction[] = querySnapshot.docs.map(
+          (doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })
+        ) as Transaction[];
         setTransactions(fetchedTransactions);
         setOriginalTransactions(fetchedTransactions);
       } catch (error) {
-        console.error('Error fetching transactions:', error);
+        console.error("Error fetching transactions:", error);
       } finally {
         setLoading(false);
       }
@@ -101,32 +139,34 @@ const TransactionScreen = () => {
 
     fetchTransactions();
   }, []);
- 
+
   useEffect(() => {
-      const fetchOptions = async () => {
-        try {
-          const { accountOptions } = await fetchAccountList(societyName, transactionFromToGroupList);
-            // push 'All' at the start of array using unshift
-          accountOptions.unshift({ label: "All", value: "All", group:"All" });
-            // Update the state with the sorted options
-          setLedgerOptions(accountOptions);
-        } catch (error) {
-          Alert.alert("Error", "Failed to fetch account options.");
-        }
-      };
-  
-      fetchOptions();
-    }, []);
+    const fetchOptions = async () => {
+      try {
+        const { accountOptions } = await fetchAccountList(
+          societyName,
+          transactionFromToGroupList
+        );
+        // push 'All' at the start of array using unshift
+        accountOptions.unshift({ label: "All", value: "All", group: "All" });
+        // Update the state with the sorted options
+        setLedgerOptions(accountOptions);
+      } catch (error) {
+        Alert.alert("Error", "Failed to fetch account options.");
+      }
+    };
+
+    fetchOptions();
+  }, []);
 
   // Calculate Totals
   const totalIncome = transactions
-    .filter((transaction) => transaction.type === 'Income')
+    .filter((transaction) => transaction.type === "Income")
     .reduce((sum, transaction) => sum + transaction.amount, 0);
 
   const totalExpenses = transactions
-    .filter((transaction) => transaction.type === 'Expense')
+    .filter((transaction) => transaction.type === "Expense")
     .reduce((sum, transaction) => sum + transaction.amount, 0);
-
 
   const resetFilters = () => {
     setIsModalVisible(true);
@@ -135,32 +175,44 @@ const TransactionScreen = () => {
 
   const applyFilters = () => {
     setIsModalVisible(false);
-  
+
     const filteredData = transactions.filter((item) => {
       // Filter by date range
       const itemDate = new Date(item.transactionDate); // Assuming `item.date` is a string in a valid date format
       const isWithinDateRange = itemDate >= fromDate && itemDate <= toDate;
 
       // Filter by ledger
-      const matchesLedger = ledger === "All" || item.paidFrom === ledger || item.paidTo === ledger ;
-    
-  
+      const matchesLedger =
+        ledger === "All" || item.paidFrom === ledger || item.paidTo === ledger;
+
       // Include item if it matches all filters
-      return (
-        isWithinDateRange &&
-        matchesLedger 
-                  
-      );
+      return isWithinDateRange && matchesLedger;
     });
-  
+
     setTransactions(filteredData);
   };
 
   useEffect(() => {
-      if (originaltransactions.length > 0) {
-        applyFilters(); // Apply filters after data fetch
-      }
-    }, [originaltransactions]);
+    if (originaltransactions.length > 0) {
+      applyFilters(); // Apply filters after data fetch
+    }
+  }, [originaltransactions]);
+
+  const [menuVisible, setMenuVisible] = useState(false);
+  const handleMenuOptionPress = (option: string) => {
+    console.log(`${option} selected`);
+    if (option === "Download PDF") {
+      generatePDF();
+    }
+    setMenuVisible(false);
+  };
+  const closeMenu = () => {
+    setMenuVisible(false);
+  };
+
+  const generatePDF = async () => {
+    console.log("Generate PDF pressed");
+  };
 
   if (loading) {
     return (
@@ -171,44 +223,60 @@ const TransactionScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => {}} color="#fff" />
-        <Appbar.Content title="Transactions" titleStyle={styles.titleStyle} />
-        <Appbar.Action 
-                icon="filter" 
-                onPress={() => resetFilters()}
-                color="#fff"
-                />
-        <Appbar.Action icon="dots-vertical" onPress={() => {}} color="#fff" />
-      </Appbar.Header>
+    <TouchableWithoutFeedback onPress={closeMenu}>
+      <View style={styles.container}>
+        {/* Top Appbar */}
+        <AppbarComponent
+          title="Transactions"
+          source="Admin"
+          onPressFilter={() => resetFilters()}
+          onPressThreeDot={() => setMenuVisible(!menuVisible)}
+        />
 
-      {/* Content */}
-      <ScrollView style={styles.content}>
-        {/* Date and Ledger Summary */}
-              <TouchableOpacity onPress={() => resetFilters()}>
-                <View style={styles.summaryHeader}>
-                  <Text style={styles.summaryText}>
-                    From: {formatDateIntl(fromDate)} To: {formatDateIntl(toDate)}
-                    </Text>
-                  <Text style={styles.summaryText}>Ledger Account: {ledger}</Text>
-                </View>
-              </TouchableOpacity>
+        {/* Three-dot Menu */}
+        {/* Custom Menu */}
+        {menuVisible && (
+          <AppbarMenuComponent
+            items={[
+              "Edit Ledger",
+              "Delete Ledger",
+              "Download PDF",
+              "Download Excel",
+              "Vouchers PDF",
+            ]}
+            onItemPress={handleMenuOptionPress}
+            closeMenu={closeMenu}
+          />
+        )}
 
-              <View style={styles.summary}>
+        {/* Content */}
+        <ScrollView style={styles.content}>
+          {/* Date and Ledger Summary */}
+          <TouchableOpacity onPress={() => resetFilters()}>
+            <View style={styles.summaryHeader}>
+              <Text style={styles.summaryText}>
+                From: {formatDateIntl(fromDate)} To: {formatDateIntl(toDate)}
+              </Text>
+              <Text style={styles.summaryText}>Ledger Account: {ledger}</Text>
+            </View>
+          </TouchableOpacity>
 
+          <View style={styles.summary}>
             {/* Account Summary Cards */}
             {/* Bank Block */}
             <View style={[styles.block, styles.bankBlock]}>
               <Text style={styles.blockTitle}>Bank</Text>
               <View style={styles.row}>
                 <Text style={styles.label}>Opening Bal:</Text>
-                <Text style={styles.value}>₹ {openingBankBalance.toFixed(2)}</Text>
+                <Text style={styles.value}>
+                  ₹ {openingBankBalance.toFixed(2)}
+                </Text>
               </View>
               <View style={styles.row}>
                 <Text style={styles.label}>Closing Bal:</Text>
-                <Text style={styles.value}>₹ {closingBankBalance.toFixed(2)}</Text>
+                <Text style={styles.value}>
+                  ₹ {closingBankBalance.toFixed(2)}
+                </Text>
               </View>
             </View>
 
@@ -217,93 +285,102 @@ const TransactionScreen = () => {
               <Text style={styles.blockTitle}>Cash</Text>
               <View style={styles.row}>
                 <Text style={styles.label}>Opening Bal:</Text>
-                <Text style={styles.value}>₹ {openingCashBalance.toFixed(2)}</Text>
+                <Text style={styles.value}>
+                  ₹ {openingCashBalance.toFixed(2)}
+                </Text>
               </View>
               <View style={styles.row}>
                 <Text style={styles.label}>Closing Bal:</Text>
-                <Text style={styles.value}>₹ {closingCashBalance.toFixed(2)}</Text>
+                <Text style={styles.value}>
+                  ₹ {closingCashBalance.toFixed(2)}
+                </Text>
               </View>
             </View>
           </View>
 
-        {/* Income and Expense Summary */}
-        <View style={styles.summary}>
-  <Card style={[styles.card, styles.incomeCard]}>
-    <Card.Content>
-      <Text>Total Income</Text>
-      <Text style={styles.incomeText}>₹ {totalIncome.toFixed(2)}</Text>
-    </Card.Content>
-  </Card>
-  <Card style={[styles.card, styles.expenseCard]}>
-    <Card.Content>
-      <Text>Total Expenses</Text>
-      <Text style={styles.expenseText}>₹ {totalExpenses.toFixed(2)}</Text>
-    </Card.Content>
-  </Card>
-</View>
-
-        {/* Transaction List */}
-        {transactions.map((transaction) => (
-  <View key={transaction.id}>
-    <TouchableOpacity
-      onPress={() =>
-        router.push({
-          pathname: "/TransactionDetailScreen",
-          params: {
-            id: transaction.id,
-            type: transaction.type,
-            voucher: transaction.voucher,
-            transactionDate: transaction.transactionDate,
-            paidFrom: transaction.paidFrom,
-            paidTo: transaction.paidTo,
-            amount: transaction.amount,
-            narration: transaction.narration,
-            groupFrom: transaction.groupFrom,
-            groupTo: transaction.groupTo,
-          },
-        })
-      }
-    >
-      <View style={styles.transaction}>
-        <View>
-          
-        <Text variant="titleMedium">
-          {transaction.type} - {transaction.voucher}
-        </Text>
-        </View>
-        <View style={styles.transactioncontent}>
-          <View style={styles.transactionLeft}>
-            <Text>{transaction.paidTo}</Text>
-            <Text>{transaction.narration}</Text>
-            <Text>Via: {transaction.paidFrom}</Text>
+          {/* Income and Expense Summary */}
+          <View style={styles.summary}>
+            <Card style={[styles.card, styles.incomeCard]}>
+              <Card.Content>
+                <Text>Total Income</Text>
+                <Text style={styles.incomeText}>
+                  ₹ {totalIncome.toFixed(2)}
+                </Text>
+              </Card.Content>
+            </Card>
+            <Card style={[styles.card, styles.expenseCard]}>
+              <Card.Content>
+                <Text>Total Expenses</Text>
+                <Text style={styles.expenseText}>
+                  ₹ {totalExpenses.toFixed(2)}
+                </Text>
+              </Card.Content>
+            </Card>
           </View>
-          <View style={styles.transactionRight}>
-            <Text
-              variant="titleLarge"
-              style={{ color: transaction.type === "Income" ? "green" : "red" }}
-            >
-              ₹ {transaction.amount.toFixed(2)}
-            </Text>
-            <Text>{transaction.transactionDate}</Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-    <Divider />
-  </View>
-))}
-      </ScrollView>
 
-      {/* Modal */}
-      <Modal
-        visible={isModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}> 
-            
+          {/* Transaction List */}
+          {transactions.map((transaction) => (
+            <View key={transaction.id}>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/TransactionDetailScreen",
+                    params: {
+                      id: transaction.id,
+                      type: transaction.type,
+                      voucher: transaction.voucher,
+                      transactionDate: transaction.transactionDate,
+                      paidFrom: transaction.paidFrom,
+                      paidTo: transaction.paidTo,
+                      amount: transaction.amount,
+                      narration: transaction.narration,
+                      groupFrom: transaction.groupFrom,
+                      groupTo: transaction.groupTo,
+                    },
+                  })
+                }
+              >
+                <View style={styles.transaction}>
+                  <View>
+                    <Text variant="titleMedium">
+                      {transaction.type} - {transaction.voucher}
+                    </Text>
+                  </View>
+                  <View style={styles.transactioncontent}>
+                    <View style={styles.transactionLeft}>
+                      <Text>{transaction.paidTo}</Text>
+                      <Text>{transaction.narration}</Text>
+                      <Text>Via: {transaction.paidFrom}</Text>
+                    </View>
+                    <View style={styles.transactionRight}>
+                      <Text
+                        variant="titleLarge"
+                        style={{
+                          color:
+                            transaction.type === "Income" ? "green" : "red",
+                        }}
+                      >
+                        ₹ {transaction.amount.toFixed(2)}
+                      </Text>
+                      <Text>{transaction.transactionDate}</Text>
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <Divider />
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* Modal */}
+        <Modal
+          visible={isModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setIsModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
               <View style={styles.section}>
                 <Text style={styles.label}>From Date</Text>
                 <PaymentDatePicker
@@ -317,41 +394,50 @@ const TransactionScreen = () => {
                   initialDate={toDate}
                   onDateChange={setToDate}
                 />
-              
               </View>
 
-               {/* Ledger Account */}
-                  <View style={styles.section}>
-                    <Text style={styles.label}>Select Ledger </Text>
-                    <Dropdown
-                      data={ledgerOptions}
-                      onChange={setLedger}
-                      placeholder="Select Account"
-                      initialValue={ledger}
-                    />
-                  </View>
-                
+              {/* Ledger Account */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Select Ledger </Text>
+                <Dropdown
+                  data={ledgerOptions}
+                  onChange={setLedger}
+                  placeholder="Select Account"
+                  initialValue={ledger}
+                />
+              </View>
+
               {/* Apply Button */}
-              <Button mode="contained" onPress={applyFilters} style={styles.applyButton}>
-                  Go
-                </Button>
+              <Button
+                mode="contained"
+                onPress={applyFilters}
+                style={styles.applyButton}
+              >
+                Go
+              </Button>
+            </View>
           </View>
+        </Modal>
 
-        </View>
-
-      </Modal>
-
-      {/* Floating Action Button */}
-      <FAB style={styles.fab} icon="plus" onPress={() => router.push({
-          pathname: "/(Vouchers)"})} />
-    </View>
+        {/* Floating Action Button */}
+        <FAB
+          style={styles.fab}
+          icon="plus"
+          onPress={() =>
+            router.push({
+              pathname: "/(Vouchers)",
+            })
+          }
+        />
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
   header: { backgroundColor: "#6200ee" },
-  titleStyle: { color: '#fff', fontSize: 18, fontWeight: 'bold',},
+  titleStyle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   summaryHeader: { padding: 16 },
   summaryText: { fontSize: 14, color: "#666" },
   content: { padding: 2 },
@@ -364,38 +450,38 @@ const styles = StyleSheet.create({
     padding: 2,
     borderRadius: 2, // Rounded corners for the cards
     elevation: 2, // Shadow for Android
-    shadowColor: '#000', // Shadow for iOS
+    shadowColor: "#000", // Shadow for iOS
     shadowOpacity: 0.1,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 2 },
   },
   // Individual block colors
   bankCard: {
-    backgroundColor: '#E0F7FA',
+    backgroundColor: "#E0F7FA",
   },
   cashCard: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: "#FFEBEE",
   },
   incomeCard: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: "#E8F5E9",
   },
   expenseCard: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: "#FFEBEE",
   },
   // Text for Total Income and Expense
   incomeText: {
     fontSize: 18,
-    color: 'green',
-    fontWeight: 'bold',
+    color: "green",
+    fontWeight: "bold",
   },
   expenseText: {
     fontSize: 18,
-    color: 'red',
-    fontWeight: 'bold',
+    color: "red",
+    fontWeight: "bold",
   },
   transaction: { paddingVertical: 10 },
-  fab: { position: 'absolute', right: 16, bottom: 16 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  fab: { position: "absolute", right: 16, bottom: 16 },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   transactioncontent: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -409,8 +495,17 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "center",
   },
-  modalContainer: { flex: 1, justifyContent: "center", backgroundColor: "rgba(0, 0, 0, 0.5)" },
-  modalContent: { backgroundColor: "#fff", margin: 20, padding: 20, borderRadius: 10 },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    margin: 20,
+    padding: 20,
+    borderRadius: 10,
+  },
   //section: { marginBottom: 16 },
   //label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
   applyButton: { marginTop: 20 },
@@ -423,25 +518,35 @@ const styles = StyleSheet.create({
   // Text alignment and styling
   cardTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 8,
-    color: '#333',
+    color: "#333",
   },
   cardText: {
     fontSize: 14,
-    color: '#555',
+    color: "#555",
     marginBottom: 4,
   },
   cardAmount: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: "bold",
+    color: "#000",
     marginTop: 4,
   },
-  
-  accountSummary: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  accountBlock: { flex: 1, marginHorizontal: 5, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 8 },
-  accountTitle: { fontWeight: 'bold', marginBottom: 5 },
+
+  accountSummary: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  accountBlock: {
+    flex: 1,
+    marginHorizontal: 5,
+    padding: 10,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+  },
+  accountTitle: { fontWeight: "bold", marginBottom: 5 },
 
   summary: {
     flexDirection: "row",

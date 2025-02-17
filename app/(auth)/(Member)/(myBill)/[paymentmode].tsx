@@ -28,7 +28,7 @@ const PaymentModeScreen = () => {
 
     const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`
 
-  const { paymentMode, amount, selectedIds } = useLocalSearchParams();
+  const { paymentMode, amount, selectedIds, selectedBills } = useLocalSearchParams();
   const router = useRouter();
   const [balancesheetVisible, setbalancesheetVisible] = useState(false);
   const [balancesheet, setBalancesheet] = useState('');
@@ -77,6 +77,7 @@ const PaymentModeScreen = () => {
       // Define document fields
       const docData = {
         status: "Uncleared",
+        amount: parseFloat(amount as string),
         amountPaid: parseFloat(amount as string), 
         paymentDate: formattedDate, 
         paymentMode: paymentMode || "Other", 
@@ -84,7 +85,7 @@ const PaymentModeScreen = () => {
         chequeNo: chequeNo || null, 
         transactionId, 
         selectedIds: selectedIds ? JSON.parse(selectedIds as string) : [],
-        
+        selectedBills: selectedBills ? JSON.parse(selectedBills as string) : [],
       };
   
       // Keep generating a new transactionId if it already exists

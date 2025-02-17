@@ -1,17 +1,31 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, useWindowDimensions, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Card, Text, Button } from 'react-native-paper';
-import { db } from '../../../FirebaseConfig';
-import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  useWindowDimensions,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Card, Text, Button, Appbar } from "react-native-paper";
+import { db } from "../../../FirebaseConfig";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  updateDoc,
+} from "firebase/firestore";
 
-const flatTypes = ['Owner', 'Closed', 'Rent', 'Dead', 'Shop'];
+const flatTypes = ["Owner", "Closed", "Rent", "Dead", "Shop"];
 const flatColors: Record<string, string> = {
-  Owner: '#2196F3', // Blue
-  Closed: '#808080', // Grey
-  Rent: '#FFA500', // Orange
-  Dead: '#000000', // Black
-  Shop: '#FF00FF', // Magenta
+  Owner: "#2196F3", // Blue
+  Closed: "#808080", // Grey
+  Rent: "#FFA500", // Orange
+  Dead: "#000000", // Black
+  Shop: "#FF00FF", // Magenta
 };
 
 type FlatData = {
@@ -28,11 +42,18 @@ type WingData = {
   unitsPerFloor: number;
   format: string;
 };
- 
+
 const WingSetupScreen: React.FC = () => {
-  const { Wing, societyName } = useLocalSearchParams() as { Wing: string; societyName: string };
-  const [floorData, setFloorData] = useState<Record<string, FloorData> | null>(null);
-  const [originalFloorData, setOriginalFloorData] = useState<Record<string, FloorData> | null>(null);
+  const { Wing, societyName } = useLocalSearchParams() as {
+    Wing: string;
+    societyName: string;
+  };
+
+  const [floorData, setFloorData] = useState<Record<string, FloorData>>({});
+  const [originalFloorData, setOriginalFloorData] = useState<Record<
+    string,
+    FloorData
+  > | null>(null);
   const [loading, setLoading] = useState(true);
 
   const screenWidth = useWindowDimensions().width;
@@ -46,11 +67,17 @@ const WingSetupScreen: React.FC = () => {
   useEffect(() => {
     const fetchWingData = async () => {
       try {
-        const wingRef = doc(db, 'Societies', societyName as string, customWingsSubcollectionName, Wing as string);
+        const wingRef = doc(
+          db,
+          "Societies",
+          societyName as string,
+          customWingsSubcollectionName,
+          Wing as string
+        );
         const wingSnap = await getDoc(wingRef);
 
         if (!wingSnap.exists()) {
-          alert('Wing does not exist!');
+          alert("Wing does not exist!");
           return;
         }
 
@@ -64,12 +91,16 @@ const WingSetupScreen: React.FC = () => {
 
         const fetchedFloorData: Record<string, FloorData> = {};
         for (const floorDoc of floorSnaps.docs) {
-          const flatsRef = collection(floorDoc.ref, customFlatsSubcollectionName);
+          const flatsRef = collection(
+            floorDoc.ref,
+            customFlatsSubcollectionName
+          );
           const flatSnaps = await getDocs(flatsRef);
 
           const flatData: FloorData = {};
           flatSnaps.forEach((flatDoc) => {
-            const { flatType = 'Owner', resident = 'Owner' } = flatDoc.data() as FlatData;
+            const { flatType = "Owner", resident = "Owner" } =
+              flatDoc.data() as FlatData;
             flatData[flatDoc.id] = { flatType, resident };
           });
 
@@ -78,9 +109,10 @@ const WingSetupScreen: React.FC = () => {
 
         setFloorData(fetchedFloorData);
         setOriginalFloorData(JSON.parse(JSON.stringify(fetchedFloorData)));
+        // console.log("fetchedFloorData", fetchedFloorData);
       } catch (error) {
-        console.error('Error fetching wing data:', error);
-        alert('Failed to fetch data. Please try again.');
+        console.error("Error fetching wing data:", error);
+        alert("Failed to fetch data. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -92,7 +124,7 @@ const WingSetupScreen: React.FC = () => {
   const handleFlatPress = (floor: string, flatNumber: string) => {
     if (floorData) {
       setFloorData((prevFloorData) => {
-        if (!prevFloorData) return null;
+        if (!prevFloorData) return prevFloorData;
 
         // Ensure flatType exists before calling indexOf
         const currentFlatData = prevFloorData[floor]?.[flatNumber];
@@ -101,8 +133,9 @@ const WingSetupScreen: React.FC = () => {
         const currentType = currentFlatData.flatType;
         const currentIndex = flatTypes.indexOf(currentType);
 
-      // Default to the first type if the current type is invalid
-      const nextType = flatTypes[(currentIndex + 1) % flatTypes.length] || flatTypes[0];
+        // Default to the first type if the current type is invalid
+        const nextType =
+          flatTypes[(currentIndex + 1) % flatTypes.length] || flatTypes[0];
         return {
           ...prevFloorData,
           [floor]: {
@@ -112,15 +145,21 @@ const WingSetupScreen: React.FC = () => {
         };
       });
     }
-  }; 
+  };
 
   const renderFlat = ({ item, floor }: { item: string; floor: string }) => {
-    const flatType = floorData?.[floor]?.[item]?.flatType || 'Owner'; // Default to 'Owner'
-    const backgroundColor = flatColors[flatType] || flatColors['Owner']; // Fallback color
+    const flatType = floorData?.[floor]?.[item]?.flatType || "Owner"; // Default to 'Owner'
+    const backgroundColor = flatColors[flatType] || flatColors["Owner"]; // Fallback color
 
     return (
       <TouchableOpacity onPress={() => handleFlatPress(floor, item)}>
-        <Card style={[styles.card, { width: screenWidth / 3 - 10, backgroundColor }]} mode="elevated">
+        <Card
+          style={[
+            styles.card,
+            { width: screenWidth / 3 - 10, backgroundColor },
+          ]}
+          mode="elevated"
+        >
           <Card.Content>
             <Text variant="titleMedium" style={styles.cardText}>
               {item}
@@ -138,7 +177,6 @@ const WingSetupScreen: React.FC = () => {
 
     return (
       <View>
-        
         <FlatList
           data={flatNumbers}
           keyExtractor={(flatNumber) => `${floor}-${flatNumber}`}
@@ -154,90 +192,95 @@ const WingSetupScreen: React.FC = () => {
 
   const handleContinue = async () => {
     if (!floorData || !originalFloorData) return;
-  
+
     const changes: string[] = [];
-    const updates: { floor: string; flatNumber: string; oldType: string; newType: string }[] = [];
-  
+    const updates: {
+      floor: string;
+      flatNumber: string;
+      oldType: string;
+      newType: string;
+    }[] = [];
+
     // Identify modified fields
     for (const [floor, flats] of Object.entries(floorData)) {
       for (const [flatNumber, flat] of Object.entries(flats)) {
         const originalFlat = originalFloorData[floor]?.[flatNumber];
         if (!originalFlat || flat.flatType !== originalFlat.flatType) {
           changes.push(
-            `Flat ${flatNumber}: ${originalFlat?.flatType || 'N/A'} → ${flat.flatType}`
+            `Flat ${flatNumber}: ${originalFlat?.flatType || "N/A"} → ${
+              flat.flatType
+            }`
           );
           updates.push({
             floor,
             flatNumber,
-            oldType: originalFlat?.flatType || 'N/A',
+            oldType: originalFlat?.flatType || "N/A",
             newType: flat.flatType,
           });
         }
       }
     }
-  
+
     if (changes.length > 0) {
-      Alert.alert(
-        'Confirm Changes',
-        changes.join('\n'),
-        [
-          {
-            text: 'NO',
-            onPress: () => router.push({
-              pathname: '/SetupWingsScreen',
+      Alert.alert("Confirm Changes", changes.join("\n"), [
+        {
+          text: "NO",
+          onPress: () =>
+            router.push({
+              pathname: "/SetupWingsScreen",
               params: { societyName },
             }),
-            style: 'cancel',
-          },
-          {
-            text: 'YES',
-            onPress: async () => {
-              try {
-                // Apply updates to Firestore
-                for (const update of updates) {
-                  const { floor, flatNumber, newType } = update;
-                  const flatRef = doc(
-                    db,
-                    'Societies',
-                    societyName as string,
-                    customWingsSubcollectionName,
-                    Wing as string,
-                    customFloorsSubcollectionName,
-                    floor,
-                    customFlatsSubcollectionName,
-                    flatNumber
-                  );
+          style: "cancel",
+        },
+        {
+          text: "YES",
+          onPress: async () => {
+            try {
+              // Apply updates to Firestore
+              for (const update of updates) {
+                const { floor, flatNumber, newType } = update;
+                const flatRef = doc(
+                  db,
+                  "Societies",
+                  societyName as string,
+                  customWingsSubcollectionName,
+                  Wing as string,
+                  customFloorsSubcollectionName,
+                  floor,
+                  customFlatsSubcollectionName,
+                  flatNumber
+                );
 
-                  // Determine the resident value based on flatType
-                  const resident = newType === "Rent" ? "Renter" : "Owner";
-                  const renterRegisterd = newType === "Rent" ? "Notregistered" : "NA";
-   
-                  await updateDoc(flatRef, { flatType: newType, resident: resident, renterRegisterd:renterRegisterd });
-                }
-                // After all updates, navigate to SetupWingsScreen
-                router.push({
-                  pathname: '/SetupWingsScreen',
-                  params: { societyName },
-                  
+                // Determine the resident value based on flatType
+                const resident = newType === "Rent" ? "Renter" : "Owner";
+                const renterRegisterd =
+                  newType === "Rent" ? "Notregistered" : "NA";
+
+                await updateDoc(flatRef, {
+                  flatType: newType,
+                  resident: resident,
+                  renterRegisterd: renterRegisterd,
                 });
-              } catch (error) {
-                console.error('Error updating data:', error);
-                alert('Failed to save changes.');
               }
-            },
+              // After all updates, navigate to SetupWingsScreen
+              router.push({
+                pathname: "/SetupWingsScreen",
+                params: { societyName },
+              });
+            } catch (error) {
+              console.error("Error updating data:", error);
+              alert("Failed to save changes.");
+            }
           },
-        ]
-      );
+        },
+      ]);
     } else {
       router.push({
-        pathname: '/SetupWingsScreen',
+        pathname: "/SetupWingsScreen",
         params: { societyName },
-      })
+      });
     }
   };
-  
-  
-  
 
   if (loading) {
     return (
@@ -249,83 +292,159 @@ const WingSetupScreen: React.FC = () => {
 
   return (
     <>
-    <View style={styles.container}>
-      <Text style={styles.heading}>Wing Setup - {Wing}</Text>
-      <Button
-        mode="text"
-        onPress={() =>
-          Alert.alert(
-            "Do you want to Setup again?",
-            "This will remove your current setup and can't recover again",
-          [
-            {
-              text: "NO",
-              onPress: () => {}, // Dismiss the alert
-              style: "cancel",
-            },
-            {
-              text: "YES",
-              onPress: () =>
-              router.push({
-                pathname: `/(auth)/(SetupWing)/[Wing]`,
-                params: { societyName, Wing },
-              }),
-            },
-          ]
-        )}>
+      <View style={styles.container}>
+        {/* Top Appbar */}
+        <Appbar.Header style={styles.header}>
+          <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+          <Appbar.Content
+            title={`Wing Setup - ${Wing}`}
+            titleStyle={styles.titleStyle}
+          />
+        </Appbar.Header>
+        <Text style={styles.heading}>Wing Setup - {Wing}</Text>
+        <Button
+          mode="text"
+          onPress={() =>
+            Alert.alert(
+              "Do you want to Setup again?",
+              "This will remove your current setup and can't recover again",
+              [
+                {
+                  text: "NO",
+                  onPress: () => {}, // Dismiss the alert
+                  style: "cancel",
+                },
+                {
+                  text: "YES",
+                  onPress: () =>
+                    router.push({
+                      pathname: `/(auth)/(SetupWing)/[Wing]`,
+                      params: { societyName, Wing },
+                    }),
+                },
+              ]
+            )
+          }
+        >
           Setup Again?
-      </Button>
-      <View style={styles.legendContainer}>
-        {flatTypes.map((type) => (
-          <View key={type} style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: flatColors[type] }]} />
-            <Text>{type}</Text>
-          </View>
-        ))}
+        </Button>
+        <View style={styles.legendContainer}>
+          {flatTypes.map((type) => (
+            <View key={type} style={styles.legendItem}>
+              <View
+                style={[
+                  styles.legendColor,
+                  { backgroundColor: flatColors[type] },
+                ]}
+              />
+              <Text>{type}</Text>
+            </View>
+          ))}
+        </View>
+        <ScrollView style={styles.scrollcontainer} horizontal={true}>
+          <FlatList
+            data={Object.entries(floorData || {})}
+            keyExtractor={([floor]) => floor}
+            renderItem={renderFloor}
+            //scrollEnabled={false} // Disable scrolling
+            contentContainerStyle={styles.flatListContent}
+          />
+        </ScrollView>
+
+        <ScrollView horizontal style={styles.scrollView}></ScrollView>
+        <Button mode="contained" onPress={handleContinue} style={styles.button}>
+          Continue
+        </Button>
       </View>
-      <ScrollView
-       style={styles.scrollcontainer}
-       horizontal={true}
-       >
-        <FlatList
-          data={Object.entries(floorData || {})}
-          keyExtractor={([floor]) => floor}
-          renderItem={renderFloor}
-          //scrollEnabled={false} // Disable scrolling
-          contentContainerStyle={styles.flatListContent}
-        />
-      </ScrollView>
-      <View style={styles.container}></View>
-      <Button mode="contained" onPress={handleContinue} style={styles.button}>
-        Continue
-      </Button>
-    </View>
     </>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
-  scrollcontainer: {margin: 8, flexGrow:1, backgroundColor: '#DAD8C9', padding:8 },
-  heading: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-  floorHeading: { fontSize: 18, fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
-  flatListContent: { paddingHorizontal: 8, flexGrow:1 },
-  card: { margin: 4, alignItems: 'center', justifyContent: 'center', borderRadius: 8, elevation: 2 },
-  cardText: { textAlign: 'center', fontSize: 14, fontWeight: 'bold', color: '#fff' },
-  button: { marginTop: 16, alignSelf: 'center' },
+  container: { flex: 1, backgroundColor: "#fff" },
+  scrollcontainer: {
+    margin: 8,
+    flexGrow: 1,
+    backgroundColor: "#DAD8C9",
+    padding: 8,
+  },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+  heading: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  floorHeading: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  flatListContent: { paddingHorizontal: 8, flexGrow: 1 },
+  card: {
+    margin: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    elevation: 2,
+  },
+  cardText: {
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  button: { marginTop: 16, alignSelf: "center" },
   legendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
     marginTop: 16,
   },
   legendItem: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   legendColor: {
     width: 20,
     height: 20,
     borderRadius: 4,
     marginBottom: 4,
+  },
+
+  scrollView: {
+    flexGrow: 1,
+    padding: 6,
+  },
+  scrollContent: {
+    flexDirection: "column", // Stack floors vertically
+    paddingHorizontal: 16,
+    flexGrow: 1,
+  },
+  floorContainer: {
+    marginBottom: 8,
+  },
+  floorTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  row: {
+    flexDirection: "row", // Flats in a row
+    flexWrap: "wrap",
+  },
+  flatContainer: {
+    backgroundColor: "#4caf50",
+    margin: 4,
+    width: 60,
+    height: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 8,
+  },
+  flatText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
   },
 });
 

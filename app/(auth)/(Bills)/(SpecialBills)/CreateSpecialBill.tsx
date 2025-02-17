@@ -1,24 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Platform, ActivityIndicator, Alert, FlatList, TouchableOpacity } from "react-native";
+import { View, StyleSheet, ScrollView, Platform, ActivityIndicator, Alert, FlatList, TouchableOpacity, TextInput } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
-import { db } from "../../../../FirebaseConfig";
+import { db } from "@/FirebaseConfig";
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import AppbarComponent from '../../../../components/AppbarComponent'; // Adjust the path as per your structure
+import AppbarComponent from '@/components/AppbarComponent'; // Adjust the path as per your structure
 
-import DropdownMultiSelect from "../../../../utils/DropdownMultiSelect"
-import CustomButton from '../../../../components/CustomButton';
-import CustomInput from '../../../../components/CustomInput';
-import Dropdown from "../../../../utils/DropDown";
-import PaymentDatePicker from "../../../../utils/paymentDate";
+import DropdownMultiSelect from "@/utils/DropdownMultiSelect"
+import CustomButton from '@/components/CustomButton';
+import CustomInput from '@/components/CustomInput';
+import Dropdown from "@/utils/DropDown";
+import PaymentDatePicker from "@/utils/paymentDate";
 import { MaterialIcons } from '@expo/vector-icons'; // Or use another icon library if needed
 
-import { useSociety } from "../../../../utils/SocietyContext"; 
-import {fetchMembersUpdated} from "../../../../utils/fetchMembersUpdated";
+import { useSociety } from "@/utils/SocietyContext"; 
+import {fetchMembersUpdated} from "@/utils/fetchMembersUpdated";
+
+import { billItemLedgerGroupList } from '@/components/LedgerGroupList'; // Import the array
+import { fetchAccountList } from "@/utils/acountFetcher";
 
 import {
-  TextInput,
   Button,
   Switch,
   Checkbox,
@@ -61,8 +63,13 @@ const CreateSpecialBill = () => {
   const [note, setNote] = useState("");
   const [balancesheet, setBalancesheet] = useState("");
   const [balancesheetVisible, setBalancesheetVisible] = useState(false);
+  const [isAdvancePaymentSettelement, setisAdvancePaymentSettelement] = useState(false);
+
+  
 
   const balancesheets = ["Main Balance"];
+  const occuranceArray = ["One Time", "Recurring"];
+  const penaltyTypeArray = ["Fixed Price", "Percentage"];
 
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [endDate, setEndDate] = useState<Date>(new Date());
@@ -72,7 +79,13 @@ const CreateSpecialBill = () => {
   const [loading, setLoading] = useState(true);
 
 
-  const [isAdvancePaymentSettelement, setisAdvancePaymentSettelement] = useState(false);
+  const [isEnablePenalty, setIsEnablePenalty] = useState(false);
+  const [Occurance, setOccurance] = useState("");
+  const [recurringFrequency, setRecurringFrequency] = useState("");
+  const [penaltyType, setPenaltyType] = useState("");
+  const [fixPricePenalty, setfixPricePenalty] = useState("");
+  const [percentPenalty, setPercentPenalty] = useState("");
+  
 
 
   const router = useRouter();
@@ -80,11 +93,30 @@ const CreateSpecialBill = () => {
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [billItems, setBillItems] = useState<BillItem[]>([]);
 
+  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
+
+  const [ledgerAccountPenalty, setLedgerAccountPenalty] = useState<string>("");
+  const [ledgerAccountGroupPenalty, setLedgerAccountGroupPenalty] = useState<string>("");
+
   const [fetchedmembers, setFetchedMembers] = useState<Member[]>([]);
 
   const [selectedfetchedMembers, setSelectedFetchedMembers] = useState<
     { floor: string; label: string; value: string }[]
   >([]);
+
+
+  // fetch Paid From List
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const { accountOptions } = await fetchAccountList(societyName, billItemLedgerGroupList);
+        setAccountFromOptions(accountOptions);
+      } catch (error) {
+        Alert.alert("Error", "Failed to fetch account options.");
+      }
+    };
+    fetchOptions();
+  }, [billItemLedgerGroupList]);
   
  
   useEffect(() => {
@@ -208,51 +240,59 @@ const CreateSpecialBill = () => {
 
   const navigateToNextScreen = () => {
     // Validation logic
- if (!name.trim()) {
-   Alert.alert("Validation Error", "Please enter a Name.");
-   return;
- }
- if (!startDate) {
-   Alert.alert("Validation Error", "Please select a Start Date.");
-   return;
- }
- if (!endDate) {
-   Alert.alert("Validation Error", "Please select a endDate.");
-   return;
- }
- if (!dueDate) {
-   Alert.alert("Validation Error", "Please select a dueDate.");
-   return;
- }
- if (selectedfetchedMembers.length === 0) {
-  Alert.alert("Validation Error", "Please select at least one Member.");
-  return;
-  }
- if (billItems.length === 0) {
-   Alert.alert("Validation Error", "Please add at least one Bill Item.");
-   return;
- }
+      if (!name.trim()) {
+        Alert.alert("Validation Error", "Please enter a Name.");
+        return;
+      }
+      if (!startDate) {
+        Alert.alert("Validation Error", "Please select a Start Date.");
+        return;
+      }
+      if (!endDate) {
+        Alert.alert("Validation Error", "Please select a endDate.");
+        return;
+      }
+      if (!dueDate) {
+        Alert.alert("Validation Error", "Please select a dueDate.");
+        return;
+      }
+      if (selectedfetchedMembers.length === 0) {
+        Alert.alert("Validation Error", "Please select at least one Member.");
+        return;
+        }
+      if (billItems.length === 0) {
+        Alert.alert("Validation Error", "Please add at least one Bill Item.");
+        return;
+      }
 
- // Construct parameters for navigation
- const params = {
-   name,
-   note,
-   balancesheet,
-   startDate: startDate.toISOString().split("T")[0],
-   endDate: endDate.toISOString().split("T")[0],
-   dueDate: dueDate.toISOString().split("T")[0],
-   invoiceDate: invoiceDate.toISOString().split("T")[0],
-   members:formattedMembersData.join(", "),
-   items: JSON.stringify(billItems),
- };
- 
- // Navigate to the next screen
- router.push({
-   pathname: "/NextScreenSpecial",
-   params,
- });
+      // Construct parameters for navigation
+      const params = {
+        name,
+        note,
+        balancesheet,
+        startDate: startDate.toISOString().split("T")[0],
+        endDate: endDate.toISOString().split("T")[0],
+        dueDate: dueDate.toISOString().split("T")[0],
+        invoiceDate: invoiceDate.toISOString().split("T")[0],
+        members:formattedMembersData.join(", "),
+        items: JSON.stringify(billItems),
+        isEnablePenalty: isEnablePenalty ? "true" : "false", // Convert boolean to string,
+        Occurance,
+        recurringFrequency,
+        penaltyType,
+        fixPricePenalty,
+        percentPenalty,
+        ledgerAccountPenalty,
+        ledgerAccountGroupPenalty,
+      };
+      
+      // Navigate to the next screen
+      router.push({
+        pathname: "/NextScreenSpecial",
+        params,
+      });
 
- };
+      };
 
   if (loading) {
     return (
@@ -359,12 +399,15 @@ const CreateSpecialBill = () => {
         </View>
         
             {/* Select Members */}
-        <DropdownMultiSelect
-        data={fetchedmembers.map((member) => ({ label: member.label, value: member.value }))}
-        onChange={handleSelectionChange}
-        placeholder="Select Members"
-        initialValues={[]} // Pre-select Option 1
-      />
+        <View style={styles.section}>
+        <Text style={styles.label}>Members</Text>
+          <DropdownMultiSelect
+            data={fetchedmembers.map((member) => ({ label: member.label, value: member.value }))}
+            onChange={handleSelectionChange}
+            placeholder="Select Members"
+            initialValues={[]} // Pre-select Option 1
+          />
+        </View>
 
       </View>
 
@@ -436,24 +479,140 @@ const CreateSpecialBill = () => {
     </TouchableOpacity>
 
 
+    
+
     {/* switch - for Advance Payment Settelment */}
-      <View style={styles.switchContainer}>
-          <Text style={styles.label}>Advance Payment Settelement?</Text>
-          <Switch
-            value={isAdvancePaymentSettelement}
-            onValueChange={() => setisAdvancePaymentSettelement(!isAdvancePaymentSettelement)}
-            color="#4CAF50"
-          />
+      <View style={styles.cardview}>
+        <View style={styles.switchContainer}>
+              <Text style={styles.label}>Advance Payment Settelement?</Text>
+              <Switch
+                value={isAdvancePaymentSettelement}
+                onValueChange={() => setisAdvancePaymentSettelement(!isAdvancePaymentSettelement)}
+                color="#4CAF50"
+              />
+          </View>
       </View>
 
-    <Button mode="contained" onPress={navigateToNextScreen}>
-        Next
-      </Button>
-      </>
-              )}
-              keyExtractor={(item, index) => index.toString()}
-              contentContainerStyle={styles.scrollContainer}
+      {/* switch - for Penalty */}
+
+    <View style={styles.cardview}>
+      <View style={styles.switchContainer}>
+          <Text style={styles.label}>Enable Penalty</Text>
+          <Switch
+            value={isEnablePenalty}
+            onValueChange={() => setIsEnablePenalty(!isEnablePenalty)}
+            color="#4CAF50"
+          />
+    </View>
+
+      { isEnablePenalty && (
+        <>
+          <View style={styles.section}>
+            <Text style={styles.label}>Select Occurance</Text>
+            <Dropdown
+              data={occuranceArray.map((option) => ({
+                label: option,
+                value: option,
+              }))}
+              onChange={(selectedValue) => {
+                setOccurance(selectedValue);
+              }}
+              placeholder="Select "
+              initialValue={Occurance}
             />
+          </View>
+
+          {Occurance === "Recurring" && (
+            <View style={styles.section}> 
+              <Text style={styles.label}>Day(s)</Text>
+              <TextInput
+               style={styles.penaltyTextInput}
+               placeholder="0"
+               value={recurringFrequency} 
+               onChangeText={setRecurringFrequency}
+               keyboardType={"numeric"}
+              />
+              <Text style={styles.recurringText}>set how many days after penalty calculate again</Text>
+            </View>
+          )}
+
+
+          <View style={styles.section}> 
+            <Text style={styles.label}>Penalty Type</Text>
+            <Dropdown
+              data={penaltyTypeArray.map((option) => ({
+                label: option,
+                value: option,
+              }))}
+              onChange={(selectedValue) => {
+                setPenaltyType(selectedValue);
+              }}
+              placeholder="Select "
+              initialValue={penaltyType}
+            />
+          </View>
+          {penaltyType === "Fixed Price" && (
+            <View style={styles.section}> 
+              <Text style={styles.label}>Fixed Price</Text>
+              <TextInput
+               style={styles.penaltyTextInput}
+               placeholder="0.00"
+               value={fixPricePenalty}
+               onChangeText={setfixPricePenalty}
+               keyboardType={"numeric"}
+              />
+            </View>
+          )}
+          {penaltyType === "Percentage" && (
+            <View style={styles.section}> 
+              <Text style={styles.label}>Percentage (%)</Text>
+              <TextInput
+               style={styles.penaltyTextInput}
+               placeholder="0.00"
+               value={percentPenalty}
+               onChangeText={setPercentPenalty}
+               keyboardType={"numeric"}
+              />
+            </View>
+          )}
+
+          {/* Penalty Ledger Account */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Ledger Account</Text>
+            <Dropdown
+              data={accountFromOptions.map((option) => ({
+                label: option.label,
+                value: option.value,
+              }))}
+              onChange={(selectedValue) => {
+                setLedgerAccountPenalty(selectedValue);
+
+                // Find the selected account to get its group
+                const selectedOption = accountFromOptions.find(
+                  (option) => option.value === selectedValue
+                );
+                if (selectedOption) {
+                  setLedgerAccountGroupPenalty(selectedOption.group); // Set the group name
+                }
+              }}
+              placeholder="Select Account"
+              initialValue={ledgerAccountPenalty}
+            />
+
+          </View>
+
+       </>
+      )}
+    </View>
+
+      <Button mode="contained" onPress={navigateToNextScreen}>
+          Next
+        </Button>
+        </>
+    )}
+    keyExtractor={(item, index) => index.toString()}
+    contentContainerStyle={styles.scrollContainer}
+  />
 
     </View>
 
@@ -531,8 +690,17 @@ const styles = StyleSheet.create({
   actionButton: {
     marginLeft: 8, // Space between icons
   },
-  switchContainer: { flexDirection: "row", justifyContent: "space-between", marginVertical: 10 },
-  label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
+  switchContainer: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", // Ensures vertical alignment 
+  },
+  label: { 
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 6,
+    flexShrink: 1, // Prevents text from pushing the switch 
+    },
   scrollContainer: { padding: 16 },
   section: { marginBottom: 10 },
   
@@ -560,6 +728,18 @@ const styles = StyleSheet.create({
     color: '#000',
     marginLeft: 8,
   },
+  penaltyTextInput: {
+    borderBottomColor : "black",
+    borderBottomWidth: 1,
+  },
+  recurringText: {
+    fontSize: 12,
+    marginVertical: 6,
+    alignSelf: "center", // Centers horizontally
+    minWidth: 100, // Ensures it doesn't shrink too much
+    alignItems: "center", // Centers text inside
+    marginLeft: 6,
+  }
 });
 
 export default CreateSpecialBill;

@@ -10,7 +10,7 @@ import { useSociety } from "../../../utils/SocietyContext";
 const paymentRecipt = () => {
   const router = useRouter();
   const { societyName } = useSociety();
-  const { wing,floorName,flatNumber, amount, paymentDate, transactionId, paymentMode, notes, receiptImage, selectedIds, bankName,chequeNo } = useLocalSearchParams();
+  const { wing,floorName,flatNumber, amount, paymentDate, transactionId, paymentMode, notes, receiptImage, selectedIds, bankName,chequeNo,selectedBillsProperties } = useLocalSearchParams();
 
   // Ensure these are strings
     const formattedWing = String(wing);
@@ -190,6 +190,7 @@ const paymentRecipt = () => {
               selectedIds,
               bankName:formattedbankName,
               chequeNo:formattedchequeNo,
+              selectedBillsProperties,
 
               // Add other necessary params if available
           },

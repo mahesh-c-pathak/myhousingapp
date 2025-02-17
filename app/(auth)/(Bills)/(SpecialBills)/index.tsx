@@ -97,7 +97,7 @@ const GenerateSpecialBills = () => {
     
   
     const renderBill = ({ item }: { item: BillData }) => (
-      <Pressable onPress={() => router.push(`/BillDetail?title=${item.title}&id=${item.id}`)}>
+      <Pressable onPress={() => router.push(`/BillDetailNew?title=${item.title}&id=${item.id}`)}>
         <Surface style={styles.billCard}>
           <Card>
             <Card.Content>

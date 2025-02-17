@@ -1,13 +1,20 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { Card, Text } from 'react-native-paper';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
+import { Card, Text, Appbar } from "react-native-paper";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { db } from "../../../FirebaseConfig";
-import { collection, getDocs, doc } from 'firebase/firestore';
+import { collection, getDocs, doc } from "firebase/firestore";
 import { MaterialIcons } from "@expo/vector-icons"; // Import icon library
 
 const SetupWingsScreen: React.FC = () => {
-  const { societyName: localName } = useLocalSearchParams() as {societyName: string }; // Society name
+  const { societyName: localName } = useLocalSearchParams() as {
+    societyName: string;
+  }; // Society name
 
   const customWingsSubcollectionName = `${localName} wings`;
   const customFloorsSubcollectionName = `${localName} floors`;
@@ -17,7 +24,7 @@ const SetupWingsScreen: React.FC = () => {
   const router = useRouter();
 
   const [wings, setWings] = useState<Record<string, any> | null>(null);
-  const [loading, setLoading] = useState<boolean>(true); 
+  const [loading, setLoading] = useState<boolean>(true);
   const [alreadySetupWings, setAlreadySetupWings] = useState<string[]>([]);
 
   useEffect(() => {
@@ -27,21 +34,26 @@ const SetupWingsScreen: React.FC = () => {
         setLoading(false);
         return;
       }
-    
+
       try {
-        const wingsCollectionRef = collection(db, "Societies", localName, customWingsSubcollectionName);
+        const wingsCollectionRef = collection(
+          db,
+          "Societies",
+          localName,
+          customWingsSubcollectionName
+        );
         const wingsSnapshot = await getDocs(wingsCollectionRef);
-    
+
         if (!wingsSnapshot.empty) {
           const wingsData: Record<string, any> = {};
           const alreadySetupWings: string[] = []; // To store wings with floors
-    
+
           // Iterate through each wing and fetch data
           await Promise.all(
             wingsSnapshot.docs.map(async (doc) => {
               const wingKey = doc.id; // Get wing document ID
               wingsData[wingKey] = doc.data(); // Store wing data
-    
+
               // Construct reference to the floors collection for the current wing
               const floorsCollectionRef = collection(
                 db,
@@ -51,7 +63,7 @@ const SetupWingsScreen: React.FC = () => {
                 wingKey,
                 customFloorsSubcollectionName
               );
-    
+
               // Check if the floors collection exists and has documents
               const floorsSnapshot = await getDocs(floorsCollectionRef);
               if (!floorsSnapshot.empty) {
@@ -59,7 +71,7 @@ const SetupWingsScreen: React.FC = () => {
               }
             })
           );
-    
+
           setWings(wingsData); // Set the wings data state
           setAlreadySetupWings(alreadySetupWings); // Update alreadySetupWings state
         } else {
@@ -72,7 +84,6 @@ const SetupWingsScreen: React.FC = () => {
         setLoading(false);
       }
     };
-    
 
     fetchWingsData();
   }, [localName]);
@@ -82,7 +93,7 @@ const SetupWingsScreen: React.FC = () => {
 
     const cards = Object.keys(wings).map((wingKey) => {
       const wingData = wings[wingKey];
-      const wingLetter = wingKey.split('-').pop(); // Extracts the wing identifier (e.g., 'A' from 'Wing-A')
+      const wingLetter = wingKey.split("-").pop(); // Extracts the wing identifier (e.g., 'A' from 'Wing-A')
       const isSetup = alreadySetupWings.includes(wingKey); // Check if the wing is in alreadySetupWings
 
       return (
@@ -114,15 +125,15 @@ const SetupWingsScreen: React.FC = () => {
           }}
         >
           <Card.Title
-           title={`Setup Wing ${wingLetter}`} 
-           right={() =>
-            isSetup ? (
-              <MaterialIcons name="check-circle" size={24} color="green" />
-            ) : (
-              <MaterialIcons name="cancel" size={24} color="red" />
-            )
-          }
-           />
+            title={`Setup Wing ${wingLetter}`}
+            right={() =>
+              isSetup ? (
+                <MaterialIcons name="check-circle" size={24} color="green" />
+              ) : (
+                <MaterialIcons name="cancel" size={24} color="red" />
+              )
+            }
+          />
         </Card>
       );
     });
@@ -141,15 +152,31 @@ const SetupWingsScreen: React.FC = () => {
   if (!wings) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>No wings data found. Please check your connection or society details.</Text>
+        <Text style={styles.errorText}>
+          No wings data found. Please check your connection or society details.
+        </Text>
       </View>
     );
   }
-  const allWingsSetUp = wings && Object.keys(wings).length === alreadySetupWings.length;
+  const allWingsSetUp =
+    wings && Object.keys(wings).length === alreadySetupWings.length;
 
   return (
     <View style={styles.container}>
+      {/* Top Appbar */}
+      <Appbar.Header style={styles.header}>
+        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
+        <Appbar.Content title="Setup Wings" titleStyle={styles.titleStyle} />
+      </Appbar.Header>
+
+      <View style={styles.textView}>
+        <Text>
+          Setup all your blocks and you will be on admin dashboard screen
+        </Text>
+      </View>
+
       {generateCards()}
+
       {allWingsSetUp && (
         <TouchableOpacity
           style={styles.button}
@@ -169,41 +196,47 @@ const SetupWingsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: "#FFFFFF",
   },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   card: {
-    marginBottom: 16,
+    margin: 16,
+    backgroundColor: "#FFFFFF",
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  textView: {
+    marginVertical: 16,
+    padding: 16,
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
   },
   errorText: {
     fontSize: 16,
-    color: '#d32f2f',
+    color: "#d32f2f",
   },
   button: {
-    backgroundColor: '#5e35b1',
+    backgroundColor: "#5e35b1",
     padding: 16,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 16,
+    marginHorizontal: 16,
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
 });
 
 export default SetupWingsScreen;
- 

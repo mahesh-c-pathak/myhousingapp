@@ -1,10 +1,27 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, FlatList } from "react-native";
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  TouchableWithoutFeedback,
+} from "react-native";
 import { Appbar, Card, Text, Divider } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useSociety } from "../../../../utils/SocietyContext";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
-import { db } from "../../../../FirebaseConfig";
+import { useSociety } from "@/utils/SocietyContext";
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+} from "firebase/firestore";
+import { db } from "@/FirebaseConfig";
+
+import AppbarComponent from "@/components/AppbarComponent";
+import AppbarMenuComponent from "@/components/AppbarMenuComponent";
 
 const MyStatement = () => {
   const router = useRouter();
@@ -18,22 +35,126 @@ const MyStatement = () => {
   // Determine params based on source
   const societyName =
     source === "Admin" ? localParams.societyName : societyContext.societyName;
-  const wing =
-    source === "Admin" ? localParams.wing : societyContext.wing;
+  const wing = source === "Admin" ? localParams.wing : societyContext.wing;
   const flatNumber =
     source === "Admin" ? localParams.flatNumber : societyContext.flatNumber;
   const floorName =
     source === "Admin" ? localParams.floorName : societyContext.floorName;
 
+  const customWingsSubcollectionName = `${societyName} wings`;
+  const customFloorsSubcollectionName = `${societyName} floors`;
+  const customFlatsSubcollectionName = `${societyName} flats`;
+  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+
   const [myStatementData, setMyStatementData] = useState<any>([]);
-  
- 
+
   useEffect(() => {
     fetchBills();
   }, []);
 
-  // Fetch and filter bills for the specific flat
   const fetchBills = async () => {
+    try {
+      // Construct Firestore references
+      const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
+      const flatDocRef = doc(db, flatRef);
+
+      const billsCollectionRef = collection(
+        flatDocRef,
+        customFlatsBillsSubcollectionName
+      );
+      const unclearedBalanceRef = collection(
+        flatDocRef,
+        unclearedBalanceSubcollectionName
+      );
+
+      let refundtotalDebit = 0;
+      let addtotalCredit = 0;
+
+      // Fetch both collections in parallel
+      const [unclearedSnapshot, billsSnapshot] = await Promise.all([
+        getDocs(unclearedBalanceRef),
+        getDocs(billsCollectionRef),
+      ]);
+
+      let totalUnclearedBalance = 0;
+      let totalUnpaidDue = 0;
+      const balanceData: any[] = [];
+      const billsData: any[] = [];
+
+      // Process Uncleared Balance Data
+      unclearedSnapshot.forEach((doc) => {
+        const docData = doc.data();
+        const {
+          status,
+          type,
+          voucherNumber,
+          paymentReceivedDate,
+          amount,
+          amountPaid,
+          transactionId,
+        } = docData;
+
+        if (status === "Cleared") {
+          balanceData.push({
+            id: `${voucherNumber}- ${type}` || `${Math.random()}`, // Ensure ID is unique,
+            title: type === "Refund" ? "Refund Money" : "Add Money",
+            dueDate: paymentReceivedDate,
+            amount,
+            type,
+          });
+
+          if (type === "Refund") {
+            refundtotalDebit += amount;
+          }
+          if (type === "Advance") {
+            addtotalCredit += amount;
+          }
+        } else if (status === "Uncleared") {
+          totalUnclearedBalance += amountPaid || 0;
+        }
+      });
+
+      // Process Bills Data
+      billsSnapshot.forEach((doc) => {
+        const docData = doc.data();
+        const {
+          status,
+          amount = 0,
+          voucherNumber,
+          name,
+          paymentDate,
+        } = docData;
+
+        billsData.push({
+          id: voucherNumber || `${voucherNumber}-${Math.random()}`, // Ensure ID is unique,,
+          title: `Paid bill for ${name}`,
+          dueDate: paymentDate,
+          amount,
+          status,
+          type: "Paid bill",
+        });
+
+        if (status === "unpaid") {
+          totalUnpaidDue += amount; // Accumulate unpaid dues
+        }
+      });
+
+      const totalCredit = addtotalCredit - refundtotalDebit;
+      const totalDebit = billsData.reduce((sum, item) => sum + item.amount, 0);
+
+      // Update states
+      setCreditBalance(totalCredit);
+      setDebitBalance(totalDebit);
+      setTotalDue(totalUnpaidDue);
+      setMyStatementData([...billsData, ...balanceData]);
+    } catch (error) {
+      console.error("Error fetching bills and balance data:", error);
+    }
+  };
+
+  // Fetch and filter bills for the specific flat
+  const fetchBillsOld = async () => {
     try {
       const societiesDocRef = doc(db, "Societies", societyName as string);
       const societyDocSnap = await getDoc(societiesDocRef);
@@ -46,7 +167,10 @@ const MyStatement = () => {
       const societyData = societyDocSnap.data();
       const societyWings = societyData.wings;
 
-      const relevantWing = societyWings?.[wing as string]?.floorData?.[floorName as string]?.[flatNumber as string];
+      const relevantWing =
+        societyWings?.[wing as string]?.floorData?.[floorName as string]?.[
+          flatNumber as string
+        ];
       if (!relevantWing) {
         console.error("No relevant wing data found for this flat.");
         return;
@@ -71,32 +195,34 @@ const MyStatement = () => {
         }
       });
 
-        // Add Refund Details 
-        const refundData: any[] = []; // Explicitly define the type for refundData
-        if (relevantWing.Refund) {
-          relevantWing.Refund.forEach((entry: any) => {
-            refundData.push({
-              id: entry.voucherNumber,
-              title: "Refund Money",
-              dueDate: entry.paymentDate,
-              amount: entry.amount,                
-            });
+      // Add Refund Details
+      const refundData: any[] = []; // Explicitly define the type for refundData
+      if (relevantWing.Refund) {
+        relevantWing.Refund.forEach((entry: any) => {
+          refundData.push({
+            id: entry.voucherNumber,
+            title: "Refund Money",
+            dueDate: entry.paymentDate,
+            amount: entry.amount,
           });
-        };
+        });
+      }
 
-        // Add Advance Details 
-        const advanceData: any[] = []; // Explicitly define the type for advanceData
-        if (relevantWing.Advance) {
-          relevantWing.Advance.forEach((entry: any) => {
-            const dueDate = new Date(entry.paymentDate.seconds * 1000).toISOString().split("T")[0]; // Convert timestamp to date-only string
-            advanceData.push({
-              id: entry.voucherNumber,
-              title: "Add Money",
-              dueDate,
-              amount: entry.amount,                
-            });
+      // Add Advance Details
+      const advanceData: any[] = []; // Explicitly define the type for advanceData
+      if (relevantWing.Advance) {
+        relevantWing.Advance.forEach((entry: any) => {
+          const dueDate = new Date(entry.paymentDate.seconds * 1000)
+            .toISOString()
+            .split("T")[0]; // Convert timestamp to date-only string
+          advanceData.push({
+            id: entry.voucherNumber,
+            title: "Add Money",
+            dueDate,
+            amount: entry.amount,
           });
-        };
+        });
+      }
 
       const addMoneyData: any[] = []; // Explicitly define the type for addMoneyData
 
@@ -125,23 +251,26 @@ const MyStatement = () => {
         0
       );
 
-      const totalCredit = addtotalCredit - refundtotalDebit ;
-
+      const totalCredit = addtotalCredit - refundtotalDebit;
 
       const totalDebit = billsData.reduce((sum, item) => sum + item.amount, 0);
 
       // Calculate total due from unpaid bills
       const totalUnpaidDue = billsData
-      .filter((item) => item.status === "unpaid")
-      .reduce((sum, item) => sum + item.amount, 0);
+        .filter((item) => item.status === "unpaid")
+        .reduce((sum, item) => sum + item.amount, 0);
 
       setCreditBalance(totalCredit);
       setDebitBalance(totalDebit);
       setTotalDue(totalUnpaidDue);
 
       // Combine both data arrays and set them in myStatementData
-      setMyStatementData([...billsData, ...addMoneyData, ...refundData, ...advanceData]);
-
+      setMyStatementData([
+        ...billsData,
+        ...addMoneyData,
+        ...refundData,
+        ...advanceData,
+      ]);
     } catch (error) {
       console.error("Error fetching bills:", error);
     }
@@ -168,45 +297,72 @@ const MyStatement = () => {
     </Card>
   );
 
+  const [menuVisible, setMenuVisible] = useState(false);
+  const handleMenuOptionPress = (option: string) => {
+    console.log(`${option} selected`);
+    if (option === "Download PDF") {
+      generatePDF();
+    }
+    setMenuVisible(false);
+  };
+  const closeMenu = () => {
+    setMenuVisible(false);
+  };
+
+  const generatePDF = async () => {
+    console.log("Generate PDF pressed");
+  };
+
   return (
-    <View style={styles.container}>
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-        <Appbar.Content title="Statement" titleStyle={styles.titleStyle} />
-      </Appbar.Header>
+    <TouchableWithoutFeedback onPress={closeMenu}>
+      <View style={styles.container}>
+        {/* Top Appbar */}
+        <AppbarComponent
+          title="Statement"
+          source="Member"
+          onPressThreeDot={() => setMenuVisible(!menuVisible)}
+        />
 
-      <View style={styles.summaryContainer}>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryTitle}>Credit Balance</Text>
-          <Text style={[styles.summaryValue, { color: "green" }]}>
-            ₹{creditBalance.toFixed(2)}
-          </Text>
-        </View>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryTitle}>Debit Balance</Text>
-          <Text style={[styles.summaryValue, { color: "red" }]}>
-            ₹{debitBalance.toFixed(2)}
-          </Text>
-        </View>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryTitle}>Total Due</Text>
-          <Text style={styles.summaryValue}>₹{totalDue.toFixed(2)}</Text>
-        </View>
-      </View>
+        {/* Three-dot Menu */}
+        {/* Custom Menu */}
+        {menuVisible && (
+          <AppbarMenuComponent
+            items={["Download PDF"]}
+            onItemPress={handleMenuOptionPress}
+            closeMenu={closeMenu}
+          />
+        )}
 
-
-      <FlatList
-        data={myStatementData}
-        renderItem={renderStatementItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-            <Text style={styles.emptyMessage}>
-              No Statements yet
+        <View style={styles.summaryContainer}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryTitle}>Credit Balance</Text>
+            <Text style={[styles.summaryValue, { color: "green" }]}>
+              ₹{creditBalance.toFixed(2)}
             </Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryTitle}>Debit Balance</Text>
+            <Text style={[styles.summaryValue, { color: "red" }]}>
+              ₹{debitBalance.toFixed(2)}
+            </Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryTitle}>Total Due</Text>
+            <Text style={styles.summaryValue}>₹{totalDue.toFixed(2)}</Text>
+          </View>
+        </View>
+
+        <FlatList
+          data={myStatementData}
+          renderItem={renderStatementItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Text style={styles.emptyMessage}>No Statements yet</Text>
           }
-      />
-    </View>
+        />
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 
@@ -219,9 +375,9 @@ const styles = StyleSheet.create({
   },
   header: { backgroundColor: "#2196F3" },
   titleStyle: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   summaryContainer: {
     flexDirection: "row",
@@ -234,7 +390,7 @@ const styles = StyleSheet.create({
   summaryItem: {
     alignItems: "center",
     backgroundColor: "#f5f5f5",
-    width:100,
+    width: 100,
   },
   summaryTitle: {
     fontSize: 14,

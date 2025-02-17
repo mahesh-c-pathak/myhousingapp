@@ -1,15 +1,38 @@
-import { View, Text, TouchableOpacity, StyleSheet, Pressable, ActivityIndicator, FlatList, ScrollView, Modal, Alert } from 'react-native'
-import React, { useEffect, useState } from 'react';
-import { Appbar} from "react-native-paper";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  FlatList,
+  ScrollView,
+  Modal,
+  Alert,
+  TouchableWithoutFeedback,
+} from "react-native";
+import React, { useEffect, useState } from "react";
+import { Appbar } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
 
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { db } from '@firebaseConfig';
-import { doc, getDoc, collection, getDocs, updateDoc, collectionGroup, setDoc, arrayUnion } from 'firebase/firestore';
-import { Ionicons } from '@expo/vector-icons'; // Using Expo vector icons
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { db } from "@firebaseConfig";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  updateDoc,
+  collectionGroup,
+  setDoc,
+  arrayUnion,
+} from "firebase/firestore";
+import { Ionicons } from "@expo/vector-icons"; // Using Expo vector icons
 import { useSession } from "@utils/ctx";
-import { useSociety } from "../../../utils/SocietyContext";
+import { useSociety } from "@/utils/SocietyContext";
 
+import AppbarComponent from "@/components/AppbarComponent";
+import AppbarMenuComponent from "@/components/AppbarMenuComponent";
 
 // Define the structure of flatsData
 type FlatData = {
@@ -18,28 +41,33 @@ type FlatData = {
   memberStatus: string;
   ownerRegisterd?: string; // Optional property
   renterRegisterd?: string; // Optional property
-  
 };
 
 type FlatsData = Record<string, Record<string, Record<string, FlatData>>>;
 
-const flatTypes = ['owner', 'Closed', 'Rent', 'Dead', 'Shop', 'Registerd'];
-const StatusType = ['paid', 'unpaid', 'Pending Approval', 'overdue', 'Advanced Payment'];
+const flatTypes = ["owner", "Closed", "Rent", "Dead", "Shop", "Registerd"];
+const StatusType = [
+  "paid",
+  "unpaid",
+  "Pending Approval",
+  "overdue",
+  "Advanced Payment",
+];
 
 const flatColors: Record<string, string> = {
-  owner: '#2196F3', // Blue
-  Closed: '#808080', // Grey
-  Rent: '#FFA500', // Orange
-  Dead: '#000000', // Black
-  Shop: '#FF00FF', // Magenta
-  Registerd: '#2E8B57', // Green
+  owner: "#2196F3", // Blue
+  Closed: "#808080", // Grey
+  Rent: "#FFA500", // Orange
+  Dead: "#000000", // Black
+  Shop: "#FF00FF", // Magenta
+  Registerd: "#2E8B57", // Green
 };
 
 const StatusColor: Record<string, string> = {
-  "paid": "#4CAF50", // Green
-  "unpaid": "#FA8072", // Salmon
+  paid: "#4CAF50", // Green
+  unpaid: "#FA8072", // Salmon
   "Pending Approval": "#FFEB3B", // Yellow
-  "overdue": "#FF0000", // Red
+  overdue: "#FF0000", // Red
   "Advanced Payment": "#2196F3", // Blue
 };
 
@@ -53,12 +81,12 @@ type UserDetails = {
 
 const CollectionNew = () => {
   const { societyName: mysocietyName } = useSociety();
-  
+
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { user } = useSession();
-  
-  const userId = user?.uid
+
+  const userId = user?.uid;
 
   const navigation = useNavigation();
 
@@ -70,43 +98,46 @@ const CollectionNew = () => {
   const [selectedWing, setSelectedWing] = useState<string | null>(null);
 
   const [flatsData, setFlatsData] = useState<FlatsData>({}); // Explicit type for flatsData
-  const [flatTypeCounts, setFlatTypeCounts] = useState<Record<string, number>>({});
+  const [flatTypeCounts, setFlatTypeCounts] = useState<Record<string, number>>(
+    {}
+  );
 
   const [selectedFlat, setSelectedFlat] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
   const [selectedFlatType, setSelectedFlatType] = useState<string | null>(null);
-  
+
   const [userTypeModalVisible, setUserTypeModalVisible] = useState(false); // For user type selection
-  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false); // For current modal content
+  const [confirmationModalVisible, setConfirmationModalVisible] =
+    useState(false); // For current modal content
   const [userType, setUserType] = useState<"Owner" | "Renter" | null>(null); // Selected user type
 
   useEffect(() => {
-        // Dynamically hide the header for this screen
-        navigation.setOptions({ headerShown: false });
-      }, [navigation]);
-
+    // Dynamically hide the header for this screen
+    navigation.setOptions({ headerShown: false });
+  }, [navigation]);
 
   const fetchFlatsData = async () => {
     setLoading(true);
     try {
-      const flatsQuerySnapshot = await getDocs(collectionGroup(db, customFlatsSubcollectionName));
+      const flatsQuerySnapshot = await getDocs(
+        collectionGroup(db, customFlatsSubcollectionName)
+      );
       const data: Record<string, any> = {};
-      
-  
+
       flatsQuerySnapshot.forEach((doc) => {
         const flatData = doc.data();
         const flatId = doc.id;
-  
+
         const flatPath = doc.ref.path;
         const pathSegments = flatPath.split("/");
         const wing = pathSegments[3];
         const floor = pathSegments[5];
-  
+
         if (!data[wing]) data[wing] = {};
         if (!data[wing][floor]) data[wing][floor] = {};
-  
+
         const flatType = flatData.flatType || "";
-        
+
         data[wing][floor][flatId] = {
           flatType,
           resident: flatData.resident || "",
@@ -114,25 +145,20 @@ const CollectionNew = () => {
           ownerRegisterd: flatData.ownerRegisterd || "",
           renterRegisterd: flatData.renterRegisterd || "",
         };
-  
-        
       });
-  
+
       setFlatsData(data);
-      
+      // console.log("collection new flat data", data);
     } catch (error) {
       console.error("Error fetching flats data:", error);
     } finally {
       setLoading(false);
     }
   };
-  
 
   useEffect(() => {
     fetchFlatsData();
   }, []);
-
-
 
   useEffect(() => {
     // Set the first wing as selected when flatsData is loaded
@@ -156,70 +182,94 @@ const CollectionNew = () => {
     }
   }, [selectedWing, flatsData]);
 
-  const handleFlatPress = (flatId: string, flatType: string, floor: string, wing: string) => {
-
+  const handleFlatPress = (
+    flatId: string,
+    flatType: string,
+    floor: string,
+    wing: string
+  ) => {
     console.log(
-      `Yes pressed for flat: ${flatId}, flatType: ${flatType}, Floor: ${floor}, Wing: ${wing}` );
+      `Yes pressed for flat: ${flatId}, flatType: ${flatType}, Floor: ${floor}, Wing: ${wing}`
+    );
 
-      router.push({
-        pathname: "/FlatCollectionSummary",
-        params: {
-          wing: wing,
-          floorName: floor,
-          flatNumber: flatId,
-        },
-      });
-         
-   
+    router.push({
+      pathname: "/FlatCollectionSummary",
+      params: {
+        wing: wing,
+        floorName: floor,
+        flatNumber: flatId,
+      },
+    });
   };
 
-    
+  const [menuVisible, setMenuVisible] = useState(false);
+  const handleMenuOptionPress = (option: string) => {
+    console.log(`${option} selected`);
+    setMenuVisible(false);
+  };
+  const closeMenu = () => {
+    setMenuVisible(false);
+  };
 
+  const resetFilters = () => {
+    console.log("Reset Filter Pressed");
+  };
 
-    
-    
-    
-
-
-  
   const renderFlats = () => {
     if (!selectedWing || !flatsData[selectedWing]) return null;
-  
+
     return (
       <View style={styles.outerscrollContent}>
         <ScrollView horizontal style={styles.scrollView}>
           <View style={styles.scrollContent}>
-            {Object.keys(flatsData[selectedWing]).map((floor) => (
-              <View key={floor} style={styles.floorContainer}>
-                <View style={styles.row}>
-                  {Object.keys(flatsData[selectedWing][floor]).map((flat) => {
-                    const flatData = flatsData[selectedWing][floor][flat];
-                    const flatColor =
-                    flatData.memberStatus === "Registered"
-                      ? "#2E8B57" // Green for registered
-                      : flatColors[flatData.flatType] || flatColors["owner"]; // Default to owner color if flatType is missing
-                    return (
-                      <TouchableOpacity
-                        key={flat}
-                        style={[styles.flatContainer, { backgroundColor: flatColor }]}
-                        onPress={() => handleFlatPress(flat, flatData.flatType, floor,selectedWing)}
-                      >
-                        <Text style={styles.flatText}>{flat}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+            {Object.keys(flatsData[selectedWing])
+              .sort((a: string, b: string) => {
+                const extractNumber = (floor: string): number => {
+                  if (floor === "Floor G") return -1; // Assign a low value to "Floor G"
+                  const num = floor.match(/\d+/);
+                  return num ? parseInt(num[0], 10) : NaN;
+                };
+
+                return extractNumber(b) - extractNumber(a); // Sort descending
+              })
+              .map((floor) => (
+                <View key={floor} style={styles.floorContainer}>
+                  <View style={styles.row}>
+                    {Object.keys(flatsData[selectedWing][floor]).map((flat) => {
+                      const flatData = flatsData[selectedWing][floor][flat];
+                      const flatColor =
+                        flatData.memberStatus === "Registered"
+                          ? "#2E8B57" // Green for registered
+                          : flatColors[flatData.flatType] ||
+                            flatColors["owner"]; // Default to owner color if flatType is missing
+                      return (
+                        <TouchableOpacity
+                          key={flat}
+                          style={[
+                            styles.flatContainer,
+                            { backgroundColor: flatColor },
+                          ]}
+                          onPress={() =>
+                            handleFlatPress(
+                              flat,
+                              flatData.flatType,
+                              floor,
+                              selectedWing
+                            )
+                          }
+                        >
+                          <Text style={styles.flatText}>{flat}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))}
           </View>
         </ScrollView>
       </View>
     );
   };
-
-    
-
-
 
   if (loading) {
     return (
@@ -229,70 +279,91 @@ const CollectionNew = () => {
     );
   }
 
- 
-
   return (
-    <View style={styles.container}>
-      {/* Top Appbar */}
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-        <Appbar.Content title="Collection New" titleStyle={styles.titleStyle} />
-      </Appbar.Header>
+    <TouchableWithoutFeedback onPress={closeMenu}>
+      <View style={styles.container}>
+        {/* Top Appbar */}
+        <AppbarComponent
+          title="Collection New"
+          source="Admin"
+          onPressFilter={() => resetFilters()}
+          onPressThreeDot={() => setMenuVisible(!menuVisible)}
+        />
 
-      {/* Select Wing */}
-      <View style={styles.toggleContainer}>
-        {Object.keys(flatsData).map((wing) => (
-          <Pressable
-            key={wing}
-            onPress={() => setSelectedWing(wing)}
-            style={[
-              styles.toggleButton,
-              selectedWing === wing && styles.selectedToggle,
-            ]}
-          >
-            <Text
+        {/* Three-dot Menu */}
+        {/* Custom Menu */}
+        {menuVisible && (
+          <AppbarMenuComponent
+            items={["Download PDF", "Download Excel"]}
+            onItemPress={handleMenuOptionPress}
+            closeMenu={closeMenu}
+          />
+        )}
+
+        {/* Select Wing */}
+        <View style={styles.toggleContainer}>
+          {Object.keys(flatsData).map((wing) => (
+            <Pressable
+              key={wing}
+              onPress={() => setSelectedWing(wing)}
               style={[
-                styles.toggleText,
-                selectedWing === wing && styles.selectedtoggleText,
+                styles.toggleButton,
+                selectedWing === wing && styles.selectedToggle,
               ]}
-             >
-              {wing}</Text>
-          </Pressable>
-        ))}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  selectedWing === wing && styles.selectedtoggleText,
+                ]}
+              >
+                {wing}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Legend Container */}
+
+        <View style={styles.legendContainer}>
+          {StatusType.map((type) => (
+            <View key={type} style={styles.legendItem}>
+              <View style={styles.legendcountContainer}>
+                <View
+                  style={[
+                    styles.legendColor,
+                    { backgroundColor: StatusColor[type] },
+                  ]}
+                />
+                <Text style={styles.legendText}>
+                  ({flatTypeCounts[type] || 0}) {/* Show count or 0 */}
+                </Text>
+              </View>
+              <Text style={[styles.legendText, { flexWrap: "wrap" }]}>
+                {type.split(" ").map((word, index) => (
+                  <Text key={index}>
+                    {word}
+                    {"\n"}
+                  </Text>
+                ))}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Selected Wings Flat Grid */}
+
+        {selectedWing && (
+          <Text style={styles.headingText}>Wing {selectedWing}</Text>
+        )}
+
+        {renderFlats()}
       </View>
+    </TouchableWithoutFeedback>
+  );
+};
 
-      {/* Legend Container */}
-
-      <View style={styles.legendContainer}>
-  {StatusType.map((type) => (
-    <View key={type} style={styles.legendItem}>
-      <View style={styles.legendcountContainer}>
-        <View style={[styles.legendColor, { backgroundColor: StatusColor[type] }]} />
-        <Text style={styles.legendText}>
-          ({flatTypeCounts[type] || 0}) {/* Show count or 0 */}
-        </Text>
-      </View>
-      <Text style={[styles.legendText, { flexWrap: 'wrap' }]}>
-        {type.split(' ').map((word, index) => (
-          <Text key={index}>{word}{'\n'}</Text>
-        ))}
-      </Text>
-    </View>
-  ))}
-</View>
-
-      {/* Selected Wings Flat Grid */}
-
-      {selectedWing && <Text style={styles.headingText}>Wing {selectedWing}</Text>}
-      
-      {renderFlats()}
-
-      
-    </View>
-  )
-}
-
-export default CollectionNew
+export default CollectionNew;
 
 const styles = StyleSheet.create({
   container: {
@@ -317,11 +388,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     marginBottom: 16,
-    marginTop:16,
-    alignItems:'center'
+    marginTop: 16,
+    alignItems: "center",
   },
   toggleButton: {
-    margin:8,
+    margin: 8,
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
     height: 50, // Default height
@@ -363,16 +434,15 @@ const styles = StyleSheet.create({
   scrollView: {
     flexGrow: 0,
   },
-  outerscrollContent:{
+  outerscrollContent: {
     margin: 16,
-    paddingHorizontal:4,
-    paddingTop:8,
-    backgroundColor:'#dddddd',
+    paddingHorizontal: 4,
+    paddingTop: 8,
+    backgroundColor: "#dddddd",
 
     borderWidth: 1, // Optional for outline
     borderColor: "#e0e0e0", // Optional for outline
     borderRadius: 8,
-
   },
   scrollContent: {
     flexDirection: "column", // Stack floors vertically
@@ -400,13 +470,13 @@ const styles = StyleSheet.create({
   },
 
   legendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     marginTop: 16,
     gap: 8, // Add spacing between legend items (React Native 0.71+)
   },
   legendItem: {
-    alignItems: 'center', // Center align both color and text
+    alignItems: "center", // Center align both color and text
     marginHorizontal: 4, // Space between items
     marginBottom: 8, // Space between rows
   },
@@ -418,10 +488,10 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 12, // Adjust text size as needed
-    textAlign: 'center',
+    textAlign: "center",
   },
   legendcountContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   modalOverlay: {
     flex: 1,
@@ -429,63 +499,62 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
- 
-    modalContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-      backgroundColor: "rgba(0, 0, 0, 0.5)", // Dimmed background
-    },
-    modalContent: {
-      width: "80%", // Adjust modal width
-      backgroundColor: "#fff", // Modal background color
-      borderRadius: 10, // Rounded corners
-      padding: 20, // Inner padding
-      alignItems: "center", // Center content horizontally
-      shadowColor: "#000", // Shadow for iOS
-      shadowOffset: { width: 0, height: 2 }, // Shadow position
-      shadowOpacity: 0.25, // Shadow transparency
-      shadowRadius: 4, // Shadow blur radius
-      elevation: 5, // Shadow for Android
-    },
-    modalTitle: {
-      fontSize: 18,
-      fontWeight: "bold",
-      marginBottom: 15,
-      textAlign: "center",
-    },
-    modalText: {
-      fontSize: 16,
-      marginBottom: 20,
-      textAlign: "center",
-    },
-    modalButtons: {
-      flexDirection: "row", // Arrange buttons horizontally
-      justifyContent: "space-around", // Space between buttons
-      width: "100%",
-    },
-    button: {
-      padding: 10,
-      borderRadius: 5,
-      minWidth: 80,
-      alignItems: "center",
-    },
-    buttonYes: {
-      backgroundColor: "#2196F3", // Blue for Yes
-    },
-    buttonNo: {
-      backgroundColor: "#FFA500", // Orange for No
-    },
-    buttonText: {
-      color: "#fff",
-      fontWeight: "bold",
-    },
-    closeButton: {
-      position: "absolute",
-      top: 5,
-      right: 5,
-      borderRadius: 20,
-      padding: 5,
-    },
 
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)", // Dimmed background
+  },
+  modalContent: {
+    width: "80%", // Adjust modal width
+    backgroundColor: "#fff", // Modal background color
+    borderRadius: 10, // Rounded corners
+    padding: 20, // Inner padding
+    alignItems: "center", // Center content horizontally
+    shadowColor: "#000", // Shadow for iOS
+    shadowOffset: { width: 0, height: 2 }, // Shadow position
+    shadowOpacity: 0.25, // Shadow transparency
+    shadowRadius: 4, // Shadow blur radius
+    elevation: 5, // Shadow for Android
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  modalButtons: {
+    flexDirection: "row", // Arrange buttons horizontally
+    justifyContent: "space-around", // Space between buttons
+    width: "100%",
+  },
+  button: {
+    padding: 10,
+    borderRadius: 5,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  buttonYes: {
+    backgroundColor: "#2196F3", // Blue for Yes
+  },
+  buttonNo: {
+    backgroundColor: "#FFA500", // Orange for No
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    borderRadius: 20,
+    padding: 5,
+  },
 });

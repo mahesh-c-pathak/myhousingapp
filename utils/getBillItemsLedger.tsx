@@ -18,7 +18,7 @@ interface Item {
 export const getBillItemsLedger = async (
   societyName: string,
     billNumber: string, // Bill document ID
-    residentType: "owner" | "Tenant" | "Closed" // Resident type
+    residentType: "owner" | "Renter" | "Closed" // Resident type
   ): Promise<{ updatedLedgerAccount: string; ledgerAccount: string; amount: number; groupFrom: string; invoiceDate: string; }[]> => {
     try {
       const specialBillCollectionName = `specialBills_${societyName}`;
@@ -38,7 +38,7 @@ export const getBillItemsLedger = async (
         let amount = 0;
         if (residentType === "owner") {
           amount = item.ownerAmount || 0;
-        } else if (residentType === "Tenant") {
+        } else if (residentType === "Renter") {
           amount = item.rentAmount || 0;
         } else if (residentType === "Closed") {
           amount = item.closedUnitAmount || 0;

@@ -1,20 +1,43 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, StyleSheet, Alert, Platform, Text, FlatList  } from "react-native";
-import { TextInput, Button, Card, Menu, Appbar, ActivityIndicator } from "react-native-paper";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Platform,
+  Text,
+  FlatList,
+} from "react-native";
+import {
+  TextInput,
+  Button,
+  Card,
+  Menu,
+  Appbar,
+  ActivityIndicator,
+} from "react-native-paper";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
-import { collection, doc, getDoc, getDocs, query, where, addDoc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  addDoc,
+  updateDoc,
+} from "firebase/firestore";
 import { db } from "@/FirebaseConfig";
 import { updateLedger } from "@/utils/updateLedger";
 import { useSociety } from "@/utils/SocietyContext";
-import CustomButton from '@/components/CustomButton';
-import CustomInput from '@/components/CustomInput';
+import CustomButton from "@/components/CustomButton";
+import CustomInput from "@/components/CustomInput";
 import Dropdown from "@/utils/DropDown";
 import PaymentDatePicker from "@/utils/paymentDate";
 import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
-import { expenseToGroupsList } from '@/components/LedgerGroupList'; // Import the array
+import { expenseToGroupsList } from "@/components/LedgerGroupList"; // Import the array
 import { fetchAccountList } from "@/utils/acountFetcher";
 import { generateVoucherNumber } from "@/utils/generateVoucherNumber";
- 
 
 const ExpenseScreen: React.FC = () => {
   const router = useRouter();
@@ -42,14 +65,17 @@ const ExpenseScreen: React.FC = () => {
   const [paymentNote, setPaymentNote] = useState<string>("");
   const [transactionDate, setTransactionDate] = useState<Date>(new Date());
 
-  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
-  const [accountToOptions, setAccountToOptions] = useState<{ label: string; value: string; group: string }[]>([]);
+  const [accountFromOptions, setAccountFromOptions] = useState<
+    { label: string; value: string; group: string }[]
+  >([]);
+  const [accountToOptions, setAccountToOptions] = useState<
+    { label: string; value: string; group: string }[]
+  >([]);
 
   const [asOnDate, setAsOnDate] = useState<Date>(new Date());
   const [loading, setLoading] = useState(false);
 
   // useEffect(() => {console.log('params?.id', params?.id)}, [params?.id]);
-
 
   // Function to format date as "YYYY-MM-DD"
   const formatDate = (date: Date) => {
@@ -67,37 +93,48 @@ const ExpenseScreen: React.FC = () => {
   };
 
   // fetch Paid To List
-    useEffect(() => {
-      const fetchOptions = async () => {
-        try {
-          const { accountOptions } = await fetchAccountList(societyName,expenseToGroupsList);
-          setAccountToOptions(accountOptions);
-        } catch (error) {
-          Alert.alert("Error", "Failed to fetch account options.");
-        }
-      };
-      fetchOptions();
-    }, [expenseToGroupsList, params?.id]);
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const { accountOptions } = await fetchAccountList(
+          societyName,
+          expenseToGroupsList
+        );
+        setAccountToOptions(accountOptions);
+      } catch (error) {
+        Alert.alert("Error", "Failed to fetch account options.");
+      }
+    };
+    fetchOptions();
+  }, [expenseToGroupsList, params?.id]);
 
-    // fetch Paid from List
-    useEffect(() => {
-      const fetchbankCashOptions = async () => {
-        try {
-          const { accountFromOptions } = await fetchbankCashAccountOptions(societyName);
-          setAccountFromOptions(accountFromOptions);
-        } catch (error) {
-          Alert.alert("Error", "Failed to fetch bank Cash account options.");
-        }
-      };
-  
-      fetchbankCashOptions();
-    }, [params?.id]);
+  // fetch Paid from List
+  useEffect(() => {
+    const fetchbankCashOptions = async () => {
+      try {
+        const { accountFromOptions } = await fetchbankCashAccountOptions(
+          societyName
+        );
+        setAccountFromOptions(accountFromOptions);
+      } catch (error) {
+        Alert.alert("Error", "Failed to fetch bank Cash account options.");
+      }
+    };
+
+    fetchbankCashOptions();
+  }, [params?.id]);
 
   useEffect(() => {
     const fetchTransactionDetails = async () => {
       if (isEditMode && params?.id) {
         try {
-          const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
+          const transactionRef = doc(
+            db,
+            "Societies",
+            societyName,
+            transactionCollectionName,
+            params.id as string
+          );
           const transactionDoc = await getDoc(transactionRef);
 
           if (transactionDoc.exists()) {
@@ -105,13 +142,23 @@ const ExpenseScreen: React.FC = () => {
             setPaidFrom(transactionData.paidFrom || "");
             setPaidTo(transactionData.paidTo || "");
             setNarration(transactionData.narration || "");
-            setAmount(transactionData.amount ? transactionData.amount.toString() : "");
+            setAmount(
+              transactionData.amount ? transactionData.amount.toString() : ""
+            );
             setCustomVoucher(transactionData.customVoucher || "");
             setPaymentNote(transactionData.paymentNote || "");
-            setAsOnDate(transactionData.transactionDate ? new Date(transactionData.transactionDate) : new Date());
-            setFormattedDate(formatDate(
-              transactionData.transactionDate ? new Date(transactionData.transactionDate) : new Date()
-            ));
+            setAsOnDate(
+              transactionData.transactionDate
+                ? new Date(transactionData.transactionDate)
+                : new Date()
+            );
+            setFormattedDate(
+              formatDate(
+                transactionData.transactionDate
+                  ? new Date(transactionData.transactionDate)
+                  : new Date()
+              )
+            );
             setGroupFrom(transactionData.groupFrom);
             setGroupTo(transactionData.groupTo);
           } else {
@@ -126,149 +173,172 @@ const ExpenseScreen: React.FC = () => {
     fetchTransactionDetails();
   }, [isEditMode, params?.id]);
 
-  
-
   useEffect(() => {
     setFormattedDate(formatDate(asOnDate));
   }, [asOnDate]);
-  
 
   const handleSave = async () => {
     if (!paidFrom || !paidTo || !amount) {
-        Alert.alert("Error", "Please fill in all required fields.");
-        return;
+      Alert.alert("Error", "Please fill in all required fields.");
+      return;
     }
     setLoading(true);
     try {
-        const parsedAmount = parseFloat(amount);
-        if (isNaN(parsedAmount) || parsedAmount <= 0) {
-            Alert.alert("Error", "Please enter a valid amount.");
-            return;
-        }
+      const parsedAmount = parseFloat(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        Alert.alert("Error", "Please enter a valid amount.");
+        return;
+      }
 
-        const transaction: {
-          paidFrom: string;
-          paidTo: string;
-          groupFrom: string;
-          groupTo: string;
-          narration: string;
-          amount: number;
-          customVoucher: string | null;
-          paymentNote: string | null;
-          transactionDateTime: string;
-          transactionDate: string;
-          createdAt: string;
-          type: string;
-          voucher?: string;
-        } = {
-          paidFrom,
-          paidTo,
-          groupFrom,
+      const transaction: {
+        paidFrom: string;
+        paidTo: string;
+        groupFrom: string;
+        groupTo: string;
+        narration: string;
+        amount: number;
+        customVoucher: string | null;
+        paymentNote: string | null;
+        transactionDateTime: string;
+        transactionDate: string;
+        createdAt: string;
+        type: string;
+        voucher?: string;
+      } = {
+        paidFrom,
+        paidTo,
+        groupFrom,
+        groupTo,
+        narration,
+        amount: parsedAmount,
+        customVoucher: customVoucher || null,
+        paymentNote: paymentNote || null,
+        transactionDateTime: asOnDate.toISOString(),
+        transactionDate: formattedDate,
+        createdAt: new Date().toISOString(),
+        type: "Expense",
+      };
+
+      if (isEditMode && params?.id) {
+        // Update existing transaction
+        const transactionRef = doc(
+          db,
+          "Societies",
+          societyName,
+          transactionCollectionName,
+          params.id as string
+        );
+        const transactionDoc = await getDoc(transactionRef);
+        if (!transactionDoc.exists()) {
+          Alert.alert("Error", "Transaction not found.");
+          return;
+        }
+        const originalTransaction = transactionDoc.data();
+        const originalPaidFrom = originalTransaction.paidFrom;
+        const originalPaidTo = originalTransaction.paidTo;
+        const originalGroupFrom = originalTransaction.groupFrom;
+        const originalGroupTo = originalTransaction.groupTo;
+        const originalAmount = parseFloat(originalTransaction.amount);
+        const originalTransactionDate = originalTransaction.transactionDate;
+
+        // Update the transaction in Firestore
+        await updateDoc(transactionRef, transaction);
+
+        // Revert original ledger updates
+        await updateLedger(
+          societyName,
+          originalGroupTo,
+          originalPaidTo,
+          originalAmount,
+          liabilityAccounts.includes(originalPaidTo) ? "Add" : "Subtract",
+          originalTransactionDate
+        );
+
+        await updateLedger(
+          societyName,
+          originalGroupFrom,
+          originalPaidFrom,
+          originalAmount,
+          "Add",
+          originalTransactionDate
+        );
+
+        // Apply new ledger updates
+        await updateLedger(
+          societyName,
           groupTo,
-          narration,
-          amount: parsedAmount,
-          customVoucher: customVoucher || null,
-          paymentNote: paymentNote || null,
-          transactionDateTime: asOnDate.toISOString(),
-          transactionDate: formattedDate,
-          createdAt: new Date().toISOString(),
-          type: "Expense",
-        };
+          paidTo,
+          parsedAmount,
+          liabilityAccounts.includes(paidTo) ? "Subtract" : "Add",
+          formattedDate
+        );
 
+        await updateLedger(
+          societyName,
+          groupFrom,
+          paidFrom,
+          parsedAmount,
+          "Subtract",
+          formattedDate
+        );
 
-        if (isEditMode && params?.id) {
-            // Update existing transaction
-            const transactionRef = doc(db,"Societies", societyName, transactionCollectionName, params.id as string);
-            const transactionDoc = await getDoc(transactionRef);
-            if (!transactionDoc.exists()) {
-              Alert.alert("Error", "Transaction not found.");
-              return;
-            }
-            const originalTransaction = transactionDoc.data();
-            const originalPaidFrom = originalTransaction.paidFrom;
-            const originalPaidTo = originalTransaction.paidTo;
-            const originalGroupFrom = originalTransaction.groupFrom;
-            const originalGroupTo = originalTransaction.groupTo;
-            const originalAmount = parseFloat(originalTransaction.amount);
-            const originalTransactionDate = originalTransaction.transactionDate;
+        Alert.alert("Success", "Transaction updated successfully!", [
+          {
+            text: "OK",
+            onPress: () => router.replace("/TransactionScreen"),
+          },
+        ]);
+      } else {
+        // Generate voucher number and create new transaction
+        const voucher = await generateVoucherNumber();
+        transaction.voucher = voucher;
 
-            // Update the transaction in Firestore
-            await updateDoc(transactionRef, transaction);
+        await addDoc(
+          collection(db, "Societies", societyName, transactionCollectionName),
+          transaction
+        );
 
-           // Revert original ledger updates
-            await updateLedger(
-              societyName,
-              originalGroupTo,
-              originalPaidTo,
-              originalAmount,
-              liabilityAccounts.includes(originalPaidTo) ? "Add" : "Subtract",
-              originalTransactionDate
-            );
+        // Update ledger
+        await updateLedger(
+          societyName,
+          groupTo,
+          paidTo,
+          parsedAmount,
+          liabilityAccounts.includes(paidTo) ? "Subtract" : "Add",
+          formattedDate
+        );
+        await updateLedger(
+          societyName,
+          groupFrom,
+          paidFrom,
+          parsedAmount,
+          "Subtract",
+          formattedDate
+        );
 
-            await updateLedger(
-              societyName,
-              originalGroupFrom,
-              originalPaidFrom,
-              originalAmount,
-              "Add",
-              originalTransactionDate
-            );
-
-
-            // Apply new ledger updates
-            await updateLedger(societyName, groupTo, paidTo, parsedAmount, liabilityAccounts.includes(paidTo) ? "Subtract" : "Add",formattedDate);
-
-            await updateLedger(societyName, groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
-
-            Alert.alert("Success", "Transaction updated successfully!", [
-                {
-                    text: "OK",
-                    onPress: () => router.replace("/TransactionScreen"),
-                },
-            ]);
-        } else {
-            // Generate voucher number and create new transaction
-            const voucher = await generateVoucherNumber();
-            transaction.voucher = voucher;
-
-            await addDoc(collection(db,"Societies", societyName, transactionCollectionName), transaction);
-
-            // Update ledger
-            await updateLedger(
-              societyName,
-              groupTo,
-              paidTo,
-              parsedAmount,
-              liabilityAccounts.includes(paidTo) ? "Subtract" : "Add",
-              formattedDate
-            );
-            await updateLedger(societyName,groupFrom, paidFrom, parsedAmount, "Subtract", formattedDate);
-            
-
-            Alert.alert("Success", "Transaction saved successfully!", [
-                {
-                    text: "OK",
-                    onPress: () => router.replace("/TransactionScreen"),
-                },
-            ]);
-        }
+        Alert.alert("Success", "Transaction saved successfully!", [
+          {
+            text: "OK",
+            onPress: () => router.replace("/TransactionScreen"),
+          },
+        ]);
+      }
     } catch (error) {
-        console.error("Error saving transaction:", error);
-        Alert.alert("Error", "Failed to save transaction.");
+      console.error("Error saving transaction:", error);
+      Alert.alert("Error", "Failed to save transaction.");
     } finally {
       setLoading(false);
     }
-};
+  };
 
+  if (loading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
-    if (loading) {
-      return (
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" />
-        </View>
-      );
-    }
- 
   return (
     <View style={styles.container}>
       {/* Top Appbar */}
@@ -281,8 +351,7 @@ const ExpenseScreen: React.FC = () => {
         data={[{}]} // Use a single-item list to render your UI
         renderItem={() => (
           <>
-          <View style={styles.cardview}>
-            
+            <View style={styles.cardview}>
               {/* Paid From */}
               <View style={styles.section}>
                 <Text style={styles.label}>Paid From</Text>
@@ -305,7 +374,6 @@ const ExpenseScreen: React.FC = () => {
                   placeholder="Select Account"
                   initialValue={paidFrom}
                 />
-
               </View>
 
               {/* Paid To */}
@@ -333,20 +401,19 @@ const ExpenseScreen: React.FC = () => {
               </View>
 
               {/* Narration */}
-              <View style={{ width: '100%' }}>
+              <View style={{ width: "100%" }}>
                 <CustomInput
                   label="Narration"
                   value={narration}
                   onChangeText={setNarration}
-                  multiline = {true}
+                  multiline={true}
                 />
               </View>
-
             </View>
 
             <View style={styles.cardview}>
               {/* Amount */}
-              <View style={{ width: '100%' }}>
+              <View style={{ width: "100%" }}>
                 <CustomInput
                   label="Amount"
                   value={amount}
@@ -356,7 +423,7 @@ const ExpenseScreen: React.FC = () => {
               </View>
 
               {/* Custom Voucher No */}
-              <View style={{ width: '100%' }}>
+              <View style={{ width: "100%" }}>
                 <CustomInput
                   label="Custom Voucher No. (optional)"
                   value={customVoucher}
@@ -364,13 +431,13 @@ const ExpenseScreen: React.FC = () => {
                 />
               </View>
 
-                {/* Note */}
-              <View style={{ width: '100%' }}>
+              {/* Note */}
+              <View style={{ width: "100%" }}>
                 <CustomInput
                   label="Payment Note"
                   value={paymentNote}
                   onChangeText={setPaymentNote}
-                  multiline = {true}
+                  multiline={true}
                 />
               </View>
 
@@ -382,18 +449,17 @@ const ExpenseScreen: React.FC = () => {
                   onDateChange={handleDateChange}
                 />
               </View>
-
             </View>
           </>
         )}
         keyExtractor={(item, index) => index.toString()}
         contentContainerStyle={styles.scrollContainer}
       />
-    {/* Save Button */}
-    <CustomButton
-      onPress={handleSave}
-      title= {isEditMode ? "Update" : "Save"}
-     />
+      {/* Save Button */}
+      <CustomButton
+        onPress={handleSave}
+        title={isEditMode ? "Update" : "Save"}
+      />
     </View>
   );
 };
@@ -426,8 +492,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, // Optional for outline
     borderColor: "#e0e0e0", // Optional for outline
   },
-
-
 });
 
 export default ExpenseScreen;
